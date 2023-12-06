@@ -1,2 +1,2 @@
-# LS08
-All of my LS08 mods, modding tools and other documentation.
+# My mods
+Mods by me. Basic and scripted.
