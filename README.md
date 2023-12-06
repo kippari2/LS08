@@ -1,2 +1,3 @@
-# LS08
-All of my LS08 mods, modding tools and other documentation.
+# Script librairy
+All scripts i could find used in legacy LS-modding.
+Includes ones i've made and edited.
