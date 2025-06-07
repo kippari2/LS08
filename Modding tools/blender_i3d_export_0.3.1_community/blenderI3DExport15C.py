@@ -51,7 +51,7 @@ class I3d:
 		self.root.appendChild(self.asset)
 		exportProgram = self.doc.createElement("Export")
 		exportProgram.setAttribute("program", "Blender %i" %Get("version"))
-		exportProgram.setAttribute("version", "4.0.1")
+		exportProgram.setAttribute("version", "0.3.1")
 		self.asset.appendChild(exportProgram)
 		
 		self.files = self.doc.createElement("Files")
