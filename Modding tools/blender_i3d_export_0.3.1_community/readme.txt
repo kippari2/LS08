@@ -31,8 +31,9 @@ Change log
 0.3.1 (7.6.2025)
 ----------------------
  - Fixed vertex and face normal hedgehog issue
- - Fixed specular value mismatch
+ - Fixed multi-object export
  - Added multi-material support
+ - Fixed specular value mismatch
  - Added emissive material support
  - Added ambient color support (limited to grayscale instead of RGB)
  - Added emissive map support
