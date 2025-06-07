@@ -28,7 +28,7 @@ Known issues
 Change log
 ----------
 
-4.0.1 (7.6.2025)
+0.3.1 (7.6.2025)
 ----------------------
  - Fixed vertex and face normal hedgehog issue
  - Fixed specular value mismatch

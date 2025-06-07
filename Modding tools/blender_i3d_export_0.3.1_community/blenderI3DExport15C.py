@@ -9,7 +9,7 @@ Tooltip: 'Export to a GIANTS i3D file'
 
 __author__ = "Richard Gracik - Morc, Kippari2 (KLS Mods)"
 __url__ = ("biskupovska stranka, http://176.101.178.133:370/, http://themorc.gihub.io/, Kippari2 Github, https://github.com/kippari2/")
-__version__ = "4.0.1"
+__version__ = "0.3.1"
 __email__ = "r.gracik@gmail.com, kipparizz34@gmail.com"
 __bpydoc__ = """\
 Exports to Giants .i3d file. Based on Morc's modified 4.1.2 exporter.
