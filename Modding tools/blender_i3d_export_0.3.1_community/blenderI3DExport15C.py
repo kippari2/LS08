@@ -42,7 +42,7 @@ class I3d:
 		self.root.setAttribute("version", "1.5")
 		self.root.setAttribute("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
 		self.root.setAttribute("exporter", "LS2009 mods community i3d exporter")
-		self.root.setAttribute("website", "https://komeo.xyz/ls2009mods/")
+		#self.root.setAttribute("website", "https://komeo.xyz/ls2009mods/")
 		self.root.setAttribute("xsi:noNamespaceSchemaLocation", "https://github.com/TheMorc/LS08-things/blob/master/docs/schema/i3d-1.5f.xsd")		
 		self.doc.appendChild(self.root)
 		
