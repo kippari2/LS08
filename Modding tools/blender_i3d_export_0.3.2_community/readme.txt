@@ -1,4 +1,4 @@
-LS2009 mods community Blender i3d 1.5 exporter
+LS2009 mods community Blender i3D 1.5 exporter
 ==============================================
 
 For GIANTS Editor 0.2.5/0.3.0 - 4.0.0
@@ -27,7 +27,7 @@ Installation on Windows
 Installation Linux
 ------------------
 You'll find a hidden directory called ".blender" in your home directory. Inside there's a sub-directory
-called "scripts", place the file blenderI3D15ExportC.py there. Restart Blender.
+called "scripts", place the file blenderI3DExport15C.py there. Restart Blender.
 
 Note!
 This woks only with old distro versions (Python 2.6 is not supported and the executable won't launch on new distro versions).
@@ -40,7 +40,7 @@ Known issues
 Change log
 ----------
 
-0.3.2 (13.8.2025)
+0.3.2 (14.8.2025)
 ----------------------
  - Added more texture export options
    - Added absolute path option
