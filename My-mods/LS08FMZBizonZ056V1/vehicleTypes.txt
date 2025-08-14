@@ -1,0 +1,13 @@
+<steerables>
+	<type name="CombineAP" className="CombineAP" filename="data/scripts/vehicles/fmz/CombineAP.lua"/>
+	<type name="CombineAP2" className="CombineAP2" filename="data/scripts/vehicles/fmz/CombineAP2.lua"/>
+	<type name="CombineAP3" className="CombineAP3" filename="data/scripts/vehicles/fmz/CombineAP3.lua"/>
+</steerables>
+<cutters>
+	<type name="CutterAP" className="CutterAP" filename="data/scripts/vehicles/fmz/CutterAP.lua"/>
+</cutters>
+
+@author: kippari2 (KLS Mods)
+@Date: 19.3.2024
+@Known issues:
+-the collision is kinda fucked by the giants engine making it easier to get stuck on uphill ramps (to be solved in V2)

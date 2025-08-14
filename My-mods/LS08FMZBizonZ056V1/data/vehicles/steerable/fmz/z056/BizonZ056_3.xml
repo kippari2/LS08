@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="iso-8859-1" standalone="no" ?>
+<vehicle type="CombineAP3">
+    <name>
+        <en>Bizon Z056</en>
+        <de>Bizon Z056</de>
+    </name>
+    <description>Bizon Z056 produced by FMZ in the city of Plock</description>
+    <filename>data/vehicles/steerable/fmz/z056/BizonZ056_3.i3d</filename>
+	<combineSize>2</combineSize>
+    <numWheels>4</numWheels>
+	<fuelCapacity>200</fuelCapacity>
+    <fuelUsage>0.007</fuelUsage>
+    <downForce>5</downForce>
+	<weight>7300</weight>
+    <centerOfMass x="0" y="-2" z="0" />
+    <grainTankCapacity>2500</grainTankCapacity>
+    <grainTankUnloadingCapacity>80</grainTankUnloadingCapacity>
+	<automaticCutterLift>false</automaticCutterLift>
+	
+    <wheels autoRotateBackSpeed="2.0">
+        <wheel1 rotSpeed="-50" rotMax="40" rotMin="-40" driveMode="1" repr="6" driveNode="6|0" radius="0.32" positionX="0.2118" positionY="0" positionZ="0" deltaY="0.15" suspTravel="0.2" spring="800" damper="0" mass="0.3" />
+        <wheel2 rotSpeed="-50" rotMax="40" rotMin="-40" driveMode="1" repr="7" driveNode="7|0" radius="0.32" positionX="-0.2117" positionY="0" positionZ="0" deltaY="0.15" suspTravel="0.2" spring="800" damper="0" mass="0.3" />
+        <wheel3 rotSpeed="0" driveMode="1" repr="0" radius="0.65" positionY="-1.093" positionZ="2.0516" deltaY="0.15" suspTravel="0.18" spring="2000" damper="0" mass="0.4" />
+        <wheel4 rotSpeed="0" driveMode="1" repr="1" radius="0.65" positionY="-1.0841" positionZ="2.0516" deltaY="0.15" suspTravel="0.18" spring="2000" damper="0" mass="0.4" />
+    </wheels>
+
+	<motor minRpm="300" maxRpm="500 900 1950" brakeForce="10" forwardGearRatio="2.5" backwardGearRatio="1.4" differentialRatio="4.0" rpmFadeOutRange="20">
+		<torque rpm="500" torque="2.5"/>
+		<torque rpm="900" torque="4"/>
+		<torque rpm="1100" torque="5.0"/>
+		<torque rpm="1780" torque="5.0"/>
+		<torque rpm="1900" torque="3.5"/>
+	</motor>
+
+    <cameras count="2">
+        <camera1 index="11|0" rotatable="true" rotateNode="11" limit="true" rotMinX="-1.4" rotMaxX="0.05" transMin="7" transMax="30" />
+        <camera2 index="12" rotatable="true" rotateNode="12" limit="false" rotMinX="0" rotMaxX="0" transMin="0" transMax="0" />
+    </cameras>
+	
+    <lights count="1">
+        <light1 index="3" />
+    </lights>
+
+	<cuttingAreas count="1">
+        <cuttingArea1 startIndex="14" widthIndex="15" heightIndex="16"/>
+    </cuttingAreas>
+
+    <steering index="5|0|0" rotationSpeed="10"/>
+	<pipe index="4" />
+    <cutterAttacherJoint index="9|1|0" rotationNode="9" maxRot="22.27 0 0" rotationNode2="9|1" maxRot2="0 0 0" moveTime="2.5" />
+	<attacherJoint index="10" />
+    <exitPoint index="13" />
+
+    <threshingSound file="data/vehicles/steerable/fmz/z056/threshing.wav" pitchOffset="1" pitchScale="0.03" pitchMax="1"/>    
+    <attachSound file="data/vehicles/steerable/fendt/attach.wav" pitchOffset="1" />
+    <motorStartSound file="data/vehicles/steerable/fmz/z056/start.wav" pitchOffset="1" />
+    <motorSound file="data/vehicles/steerable/fmz/z056/engine.wav" pitchOffset="1" pitchScale="1" pitchMax="1.1" />
+
+    <pipeParticleSystem position="0 -0.2462 -3.4826" rotation="0 90 0" file="data/vehicles/particleSystems/wheatParticleSystem.i3d" />
+    <chopperParticleSystem position="0 -1 -2.8" rotation="0 0 0" file="data/vehicles/particleSystems/threshingChopperParticleSystem.i3d" />
+	<exhaustParticleSystems count="2">
+		<exhaustParticleSystem1 position="0.8179 1.4231 -0.4286" rotation="-57.761 0 0" file="data/vehicles/particleSystems/exhaustParticleSystem.i3d"/>
+		<exhaustParticleSystem2 position="0.8179 1.4231 -0.4286" rotation="-57.761 0 0" file="data/vehicles/particleSystems/exhaustParticleSystem.i3d"/>
+	</exhaustParticleSystems>
+	
+	<strawChopperParticleSystems count="3">
+		<strawChopperParticleSystem1 position="0.0093 -0.6947 -2.9612" rotation="77.3233 21.7783 -4.7705" file="data/vehicles/steerable/fmz/z056/strawChopperParticle2.i3d"/>
+		<strawChopperParticleSystem2 position="0.0093 -0.6947 -2.9612" rotation="77.3233 21.7783 -4.7705" file="data/vehicles/steerable/fmz/z056/strawChopperParticle2.i3d"/>
+		<strawChopperParticleSystem3 position="0.0065 -0.7497 -3.2252" rotation="77.3233 21.7783 -4.7705" file="data/vehicles/steerable/fmz/z056/strawChopperParticle2.i3d"/>
+	</strawChopperParticleSystems>
+	<strawChopperParticleSystems2 count="6">
+		<strawChopperParticleSystem1 position="-0.0296 -0.8171 -2.9328" rotation="67.1558 12.8629 -5.3577" file="data/vehicles/steerable/fmz/z056/strawChopperParticle.i3d"/>
+		<strawChopperParticleSystem2 position="-0.0137 -0.8816 -3.0906" rotation="67.1558 12.8629 -5.3577" file="data/vehicles/steerable/fmz/z056/strawChopperParticle.i3d"/>
+		<strawChopperParticleSystem3 position="-0.1242 -0.7912 -2.8694" rotation="63.2178 32.8645 -15.3178" file="data/vehicles/steerable/fmz/z056/strawChopperParticle.i3d"/>
+		<strawChopperParticleSystem4 position="-0.32 -0.8936 -3.1199" rotation="63.2178 32.8645 -15.3178" file="data/vehicles/steerable/fmz/z056/strawChopperParticle.i3d"/>
+		<strawChopperParticleSystem5 position="0.1242 -0.7912 -2.8694" rotation="67.6153 -6.3525 2.6091" file="data/vehicles/steerable/fmz/z056/strawChopperParticle.i3d"/>
+		<strawChopperParticleSystem6 position="0.149 -0.8692 -3.0602" rotation="67.6153 -6.3525 2.6091" file="data/vehicles/steerable/fmz/z056/strawChopperParticle.i3d"/>
+	</strawChopperParticleSystems2>
+
+	<keys>
+		<input name="railing" key="KEY_KP_0"/>
+		<input name="cabin1" key="KEY_KP_1"/>
+		<input name="cabin2" key="KEY_KP_2"/>
+		<input name="cabin3" key="KEY_KP_3"/>
+		<input name="covers" key="KEY_m"/>
+		<input name="help" key="KEY_0"/>
+		<input name="beacon" key="KEY_o"/>
+		<input name="stroh" key="KEY_x"/>
+		<input name="chopperblind" key="KEY_z"/>
+		<input name="enginecover" key="KEY_k"/>
+	</keys>
+
+	<rundumleuchten count="1">
+		<light1 rotNode="18|0" light="18|0|0" lightsource="18|0|0|0" rotSpeed="5" emitLight="true"/>
+	</rundumleuchten>
+
+	<covers index="2|7"/>
+	<strawChopper index1="2|8|0|0" index2="2|8|0" index3="2|8|0|1" minMaxX1="0 129.4035" minMaxX2="0 -67.0912" minMaxX3="0 12.7691" rotSpeed1="3" rotSpeed2="3" rotSpeed3="3"/>
+	<cabins count="3">
+		<cabin1 index="2|9"/>
+		<cabin2 index="2|10"/>
+		<cabin3 index="2|11"/>
+	</cabins>
+	<railing1 index="2|3"/>
+	<railing2 index="2|12"/>
+	<engineCover index="2|0"/>
+</vehicle>

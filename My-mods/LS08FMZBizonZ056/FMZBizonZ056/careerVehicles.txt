@@ -1,0 +1,4 @@
+<vehicle filename="data/vehicles/steerable/fmz/z056/BizonZ056_1.xml" xPosition="173.3475" yOffset="0.5" zPosition="188.8719" yRotation="0"/>
+<vehicle filename="data/vehicles/cutters/fmz/4m/HeaderZ056_1.xml" xPosition="173.3475" yOffset="0.5" zPosition="200" yRotation="0"/>
+
+By kippari2 (KLS Mods Fin)

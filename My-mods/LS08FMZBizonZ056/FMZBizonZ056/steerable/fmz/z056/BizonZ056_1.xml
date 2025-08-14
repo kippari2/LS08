@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="iso-8859-1" standalone="no" ?>
+<vehicle type="combine">
+    <name>
+        <en>Bizon Z056</en>
+        <de>Bizon Z056</de>
+    </name>
+    <description>Bizon Z056 produced by FMZ in the city of Plock</description>
+    <filename>data/vehicles/steerable/fmz/z056/BizonZ056_1.i3d</filename>
+    <numWheels>4</numWheels>
+    <wheels autoRotateBackSpeed="2.0">
+        <wheel1 rotSpeed="-50" rotMax="40" rotMin="-40" driveMode="1" repr="6" driveNode="6|0" radius="0.38" positionX="0.2118" positionY="0" positionZ="0" deltaY="0.15" suspTravel="0.2" spring="2000" damper="0" mass="0.3" />
+        <wheel2 rotSpeed="-50" rotMax="40" rotMin="-40" driveMode="1" repr="7" driveNode="7|0" radius="0.38" positionX="-0.2117" positionY="0" positionZ="0" deltaY="0.15" suspTravel="0.2" spring="2000" damper="0" mass="0.3" />
+        <wheel3 rotSpeed="0" driveMode="1" repr="0" radius="0.6" positionY="-1.093" positionZ="2.0516" deltaY="0.15" suspTravel="0.3" spring="2000" damper="0" mass="0.4" />
+        <wheel4 rotSpeed="0" driveMode="1" repr="1" radius="0.6" positionY="-1.0841" positionZ="2.0516" deltaY="0.15" suspTravel="0.3" spring="2000" damper="0" mass="0.4" />
+    </wheels>
+    <motor minRpm="700" maxRpm="820 1060 1700" brakeForce="10" forwardGearRatio="3.5" backwardGearRatio="3.5" differentialRatio="6.0"  rpmFadeOutRange="4">
+        <torque rpm="700" torque="1.9"/>
+        <torque rpm="1000" torque="2.0"/>
+        <torque rpm="1200" torque="2.5"/>
+        <torque rpm="1600" torque="3.5"/>
+        <torque rpm="1750" torque="2.2"/>
+    </motor>
+    <fuelCapacity>200</fuelCapacity>
+    <fuelUsage>0.007</fuelUsage>
+    <downForce>5</downForce>
+    <cameras count="2">
+        <camera1 index="11|0" rotatable="true" rotateNode="11" limit="true" rotMinX="-1.4" rotMaxX="0.05" transMin="7" transMax="30" />
+        <camera2 index="12" rotatable="true" rotateNode="12" limit="false" rotMinX="0" rotMaxX="0" transMin="0" transMax="0" />
+    </cameras>
+    <lights count="1">
+        <light1 index="3" />
+    </lights>
+    <steering index="5|0|0" rotationSpeed="10"/>
+    <cutterAttacherJoint index="9|1|0" rotationNode="9" maxRot="22.27 0 0" rotationNode2="9|1" maxRot2="0 0 0" moveTime="2.5" />
+    <exitPoint index="13" />
+    <threshingSound file="data/vehicles/steerable/fmz/z056/threshing.wav" pitchOffset="1" pitchScale="0.03" pitchMax="1"/>    
+    <attachSound file="data/vehicles/steerable/fendt/attach.wav" pitchOffset="1" />
+    <motorStartSound file="data/vehicles/steerable/fmz/z056/start.wav" pitchOffset="1" />
+    <motorSound file="data/vehicles/steerable/fmz/z056/engine.wav" pitchOffset="1" pitchScale="1" pitchMax="1.1" />
+    <!--<reverseDriveSound file="data/vehicles/steerable/fendt/reverseDrivingBeep.wav" />-->
+    
+    <cuttingAreas count="1">
+        <cuttingArea1 startIndex="14" widthIndex="15" heightIndex="16"/>
+    </cuttingAreas>
+    <!--<chopperBlind index="11" />-->
+    <pipe index="4" />
+    <!--<pipeLight index="14|0" />-->
+    <pipeParticleSystem position="0 -0.2462 -3.4826" rotation="0 90 0" file="data/vehicles/particleSystems/wheatParticleSystem.i3d" />
+    <chopperParticleSystem position="0 -1 -2.8" rotation="0 0 0" file="data/vehicles/particleSystems/threshingChopperParticleSystem.i3d" />
+
+    <weight>7300</weight>
+    <centerOfMass x="0" y="-2" z="0" />
+    <grainTankCapacity>2500</grainTankCapacity>
+    <grainTankUnloadingCapacity>40</grainTankUnloadingCapacity>
+    <!--<grainPlane index="16" minMaxY="2.613 3.798" windowIndex="17" windowMinMaxY="2.807 3.225" windowStartY="3.098" />-->
+
+    <attacherJoint index="10" />
+    <combineSize>2</combineSize>
+</vehicle>
