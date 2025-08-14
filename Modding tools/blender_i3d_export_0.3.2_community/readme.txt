@@ -6,6 +6,12 @@ Based on Morc's modified Blender 4.1.2 exporter.
 
 https://komeo.xyz/ls2009mods/
 
+Sources for development
+-----------------------
+https://docs.blender.org/api/2.49/
+https://github.com/TheMorc/LS08-things/tree/master/docs/schema (i3d specification schematics)
+https://web.archive.org/web/20081218155042/http://gdn.giants.ch/documentation.php#i3d_specification (complementary terminology for the schematics)
+
 Installation on Windows
 -----------------------
 1. Download Blender.
