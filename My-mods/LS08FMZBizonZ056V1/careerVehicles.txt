@@ -1,0 +1,12 @@
+<vehicle filename="data/vehicles/steerable/fmz/z056/BizonZ056_3.xml" xPosition="199.8875" yOffset="0.8" zPosition="202" yRotation="180"/>
+<vehicle filename="data/vehicles/steerable/fmz/z056/BizonZ056_2.xml" xPosition="209.3475" yOffset="0.8" zPosition="202" yRotation="180"/>
+<vehicle filename="data/vehicles/steerable/fmz/z056/BizonZ056_1.xml" xPosition="204.3475" yOffset="0.8" zPosition="202" yRotation="180"/>
+<vehicle filename="data/vehicles/cutters/fmz/4m/HeaderZ056_1.xml" xPosition="199.8875" yOffset="1.0" zPosition="198" yRotation="0"/>
+<vehicle filename="data/vehicles/cutters/fmz/4m/HeaderZ056_1.xml" xPosition="209.3475" yOffset="1.0" zPosition="198" yRotation="0"/>
+<vehicle filename="data/vehicles/cutters/fmz/4m/HeaderZ056_1.xml" xPosition="204.3475" yOffset="1.0" zPosition="198" yRotation="0"/>
+
+@author: kippari2 (KLS Mods)
+@Date: 19.3.2024
+@Known issues:
+-the collision is kinda fucked by the giants engine making it easier to get stuck on uphill ramps (to be solved in V2)
+

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="iso-8859-1" standalone="no" ?>
+<vehicle type="CutterAP">
+    <name>
+        <en>FMZ 4m header</en>
+        <de>FMZ 4m header</de>
+    </name>
+    <description></description>
+    <filename>data/vehicles/cutters/fmz/4m/HeaderZ056_1.i3d</filename>
+    <!--<sidearms index="0" />-->
+    <reel index="2" />
+    <cuttingAreas count="1">
+        <cuttingArea1 startIndex="4" widthIndex="5" heightIndex="6" losing="false"/>
+    </cuttingAreas>
+    <attacherJoint index="3" />
+	<autoPilotAreas left="true" right="true">
+        <autoPilotAreaLeft startOutside="7|3" widthOutside="7|4" heightOutside="7|5" startInside="7|0" widthInside="7|1" heightInside="7|2"/>
+        <autoPilotAreaRight startOutside="8|0" widthOutside="8|1" heightOutside="8|2" startInside="8|3" widthInside="8|4" heightInside="8|5"/>
+    </autoPilotAreas>
+    <threshingParticleSystem position="0 0 -1" rotation="0 0 0" file="data/vehicles/particleSystems/threshingCutterMiddleParticleSystem.i3d" />
+    <preferedCombineSize>2</preferedCombineSize>
+	<roll index="1" speed="0.4"/>
+</vehicle>

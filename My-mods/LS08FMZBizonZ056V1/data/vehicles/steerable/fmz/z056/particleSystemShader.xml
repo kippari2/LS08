@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+
+<CustomShader version="1.0" classRequirement="">
+    <LodLevel startDistance="0">
+        <CodeInjections>
+            <CodeInjection position="GET_DIFFUSE_LIGHTING_FS">
+<![CDATA[
+float NdotL2 = clamp(dot(lightDir, normal), 0.7, 1.0);
+/*if (NdotL2 < 0) {
+    NdotL2 = -NdotL2*0.8;
+}*/
+return NdotL2 * lightColor * atten;
+]]>
+            </CodeInjection>
+        </CodeInjections>
+    </LodLevel>
+</CustomShader>

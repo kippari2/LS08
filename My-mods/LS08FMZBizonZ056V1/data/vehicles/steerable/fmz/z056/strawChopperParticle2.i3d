@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+
+<i3D name="transform" version="1.5" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://i3d.giants.ch/schema/i3d-1.5.xsd">
+  <Asset>
+    <Export program="GIANTS Editor" version="0.3.2"/>
+  </Asset>
+
+  <Files>
+    <File name="wheatParticleSystem_file" filename="wheatParticle.png" relativePath="true"/>
+    <File name="customShader" filename="particleSystemShader.xml" relativePath="true"/>
+  </Files>
+
+  <Materials>
+    <Material name="lambert1" diffuseColor="0.5 0.5 0.5 1" specularColor="0 0 0" ambientColor="1 1 1">
+    </Material>
+    <Material name="wheatParticleSystem_mat" specularColor="0 0 0" ambientColor="1 1 1" alphaBlending="true" customShader="customShader">
+      <Texture name="wheatParticleSystem_file"/>
+    </Material>
+  </Materials>
+
+
+  <Shapes>
+    <IndexedFaceSet name="wheatParticleSystemAreaShape">
+      <Vertices>
+        <v c="-0.172216 -0.0181114 -0.127692"/>
+        <v c="0.167497 0.0197941 -0.13358"/>
+        <v c="-0.167497 -0.0197941 0.13358"/>
+        <v c="0.172216 0.0181114 0.127692"/>
+      </Vertices>
+      <Faces shaderlist="lambert1">
+        <f vi="0 1 3 2" t0="0 0 1 0 1 0.122944 0 0.122944" n="0.110745 -0.993813 -0.0084011 0.110745 -0.993813 -0.0084011 0.110745 -0.993813 -0.0084011 0.110745 -0.993813 -0.0084011" ci="0"/>
+      </Faces>
+    </IndexedFaceSet>
+  </Shapes>
+
+  <Dynamics>
+    <ParticleSystem name="wheatParticleSystem_emitter1Ref" type="sprite" rate="0.1" lifespanInfinite="false" speed="0.005" speedRandom="0.02" tangentSpeed="0.005" normalSpeed="1" lifespan="600" maxCount="80" spriteScaleX="0.35" spriteScaleY="0.35" depthSort="false" blendFactor="0.8" blendInFactor="0.0" blendOutFactor="0.0" emitterShape="wheatParticleSystemAreaShape" material="wheatParticleSystem_mat">
+      <Gravity force="0 -0.001 0"/>
+    </ParticleSystem>
+  </Dynamics>
+
+  <Scene>
+    <Dynamic name="wheatParticleSystem_emitter1" ref="wheatParticleSystem_emitter1Ref" scale="3 1 0.01"/>
+  </Scene>
+
+</i3D>
