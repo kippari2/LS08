@@ -21,9 +21,10 @@ Installation on Windows
 Installation Linux
 ------------------
 You'll find a hidden directory called ".blender" in your home directory. Inside there's a sub-directory
-called "scripts", place the file blenderI3DExport.py there. Restart Blender.
+called "scripts", place the file blenderI3D15ExportC.py there. Restart Blender.
 
-NOTE: This woks only with old distro versions (Python 2.6 is not supported and the executable won't launch on new distro versions).
+Note!
+This woks only with old distro versions (Python 2.6 is not supported and the executable won't launch on new distro versions).
 Use a virtual machine or the Windows version in Wine or run it in a container.
 
 Known issues
