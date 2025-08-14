@@ -1,6 +1,8 @@
-# LS08
-Things I have done or documented for LS08
+# LS08/Landwirtschafts simulator 2008
+Things I have made or documented for Farming simulator 2008.
 
-Includes: Mods by me
-Tools for mods/modding by me 
-LS modding script librairy
+Contents:
+* Blender .i3d 1.5 export plugins
+* FMZBizonZ056 (v1 beta)
+* FMZBizonZ056V1
+* PlayercamAndScreenshot
