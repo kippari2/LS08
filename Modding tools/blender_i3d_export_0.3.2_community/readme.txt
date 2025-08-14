@@ -20,14 +20,14 @@ Installation on Windows
 
 2. Install Python Runtime 2.6 (http://www.python.org/ftp/python/2.6/python-2.6.msi)
 
-3. Copy blenderI3DExport15C.py to Blenders scripts directory.
+3. Copy blenderI3DExport15C.py and Giants.png to Blenders scripts directory.
    (XP: C:\Documents and Settings\<USERNAME>\Application Data\Blender Foundation\Blender\.blender\scripts)
    (Vista+: %appdata%\Blender Foundation\Blender\.blender\scripts)
   
 Installation Linux
 ------------------
 You'll find a hidden directory called ".blender" in your home directory. Inside there's a sub-directory
-called "scripts", place the file blenderI3DExport15C.py there. Restart Blender.
+called "scripts", place the file blenderI3DExport15C.py and Giants.png there. Restart Blender.
 
 Note!
 This woks only with old distro versions (Python 2.6 is not supported and the executable won't launch on new distro versions).
