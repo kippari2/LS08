@@ -383,7 +383,6 @@ class I3d:
 						vertexCount=vertexCount+1
 						verts.appendChild(createI3dVert(self, 2))
 						vertexCount=vertexCount+1
-						i3dt = self.doc.createElement("f")
 						if len(face.v)==4:#It's a quad and is exported as one
 							verts.appendChild(createI3dVert(self, 3))
 							vertexCount=vertexCount+1
