@@ -259,8 +259,19 @@ class I3d:
 		faceCount = 0
 		vertexCount = 0
 		materialCount = 0
-
 		shaderlist = ""
+
+		#Maya adds vertices in a zig-zag pattern starting from the bottom, like this:
+		#2 3
+		#0 1
+		#Blender does it in a clockwise rotation starting from the top, like this:
+		#3 0
+		#2 1
+		for vert in mesh.verts:
+			print(vert.co.x, vert.index)
+			v = self.doc.createElement("v")
+			v.setAttribute("c", "%f %f %f" %(vert.co.x, vert.co.z, -vert.co.y))
+			verts.appendChild(v)
 
 		if verboseLogging:
 			print("adding mesh %s with %i vertices" %(mesh.name, len(mesh.verts)))
@@ -279,15 +290,10 @@ class I3d:
 				shaderlist = "Default"
 			
 			for face in mesh.faces:
-				
-				def createI3dVert(self, vIndex):
-					v = self.doc.createElement("v")
-					v.setAttribute("c", "%f %f %f" %(face.v[vIndex].co.x, face.v[vIndex].co.z, -face.v[vIndex].co.y))
-					return v
 
-				def createTriFace(self, vertexCount):
+				def createTriFace(self, vertexOrder):
 					i3dt = self.doc.createElement("f")
-					i3dt.setAttribute("vi", "%i %i %i" %(vertexCount - 3, vertexCount - 2, vertexCount - 1))
+					i3dt.setAttribute("vi", "%i %i %i" %(vertexOrder[0], vertexOrder[1], vertexOrder[2]))
 					if exportVertexColors and mesh.vertexColors:
 						realColorR = []
 						realColorG = []
@@ -313,9 +319,9 @@ class I3d:
 					i3dt.setAttribute("ci", "%i" %(materialCount-1))
 					faces.appendChild(i3dt)
 
-				def createQuadFace(self, vertexCount):
+				def createQuadFace(self, vertexOrder):
 					i3dt = self.doc.createElement("f")
-					i3dt.setAttribute("vi", "%i %i %i %i" %(vertexCount - 4, vertexCount - 3, vertexCount - 2, vertexCount - 1))
+					i3dt.setAttribute("vi", "%i %i %i %i" %(vertexOrder[0], vertexOrder[1], vertexOrder[2], vertexOrder[3]))
 					if exportVertexColors and mesh.vertexColors:
 						realColorR = []
 						realColorG = []
@@ -338,57 +344,31 @@ class I3d:
 							i3dt.setAttribute("n", "%f %f %f %f %f %f %f %f %f %f %f %f" %(face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y))
 					i3dt.setAttribute("ci", "%i" %(materialCount-1))
 					faces.appendChild(i3dt)
-				
+
 				if face.mat == materialCount-1:
 					faceCount = faceCount + 1
 					if exportTriangulated and len(face.v) == 4: #It's a quad and user chose to triangulate along shortest edge
 						faceCount = faceCount + 1
+						vertexCount = 4
 						if (face.v[0].co - face.v[2].co).length < (face.v[1].co - face.v[3].co).length:
-							#print("das")
-							verts.appendChild(createI3dVert(self, 0))
-							vertexCount=vertexCount+1
-							verts.appendChild(createI3dVert(self, 1))
-							vertexCount=vertexCount+1
-							verts.appendChild(createI3dVert(self, 2))
-							vertexCount=vertexCount+1
-							createTriFace(self, vertexCount)
-							verts.appendChild(createI3dVert(self, 0))
-							vertexCount=vertexCount+1
-							verts.appendChild(createI3dVert(self, 2))
-							vertexCount=vertexCount+1
-							verts.appendChild(createI3dVert(self, 3))
-							vertexCount=vertexCount+1
-							createTriFace(self, vertexCount)
+							#2103 would be the pattern for how Maya writes faces counter clockwise
+							#Blender pattern is 0123 clockwise
+							vertexOrder = [face.v[0].index, face.v[1].index, face.v[2].index] #The UV maps are fucked by the vertex order fix that!!!!
+							createTriFace(self, vertexOrder)
+							vertexOrder = [face.v[0].index, face.v[2].index, face.v[3].index]
+							createTriFace(self, vertexOrder)
 						else:
-							#print("asd")
-							verts.appendChild(createI3dVert(self, 0))
-							vertexCount=vertexCount+1
-							verts.appendChild(createI3dVert(self, 1))
-							vertexCount=vertexCount+1
-							verts.appendChild(createI3dVert(self, 3))
-							vertexCount=vertexCount+1
-							createTriFace(self, vertexCount)
-							verts.appendChild(createI3dVert(self, 1))
-							vertexCount=vertexCount+1
-							verts.appendChild(createI3dVert(self, 2))
-							vertexCount=vertexCount+1
-							verts.appendChild(createI3dVert(self, 3))
-							vertexCount=vertexCount+1
-							createTriFace(self, vertexCount)
+							vertexOrder = [face.v[0].index, face.v[1].index, face.v[3].index]
+							createTriFace(self, vertexOrder)
+							vertexOrder = [face.v[1].index, face.v[2].index, face.v[3].index]
+							createTriFace(self, vertexOrder)
 					else:
-						#print("ads")
-						verts.appendChild(createI3dVert(self, 0))
-						vertexCount=vertexCount+1
-						verts.appendChild(createI3dVert(self, 1))
-						vertexCount=vertexCount+1
-						verts.appendChild(createI3dVert(self, 2))
-						vertexCount=vertexCount+1
-						if len(face.v) == 4: #It's a quad and is exported as one
-							verts.appendChild(createI3dVert(self, 3))
-							vertexCount=vertexCount+1
-							createQuadFace(self, vertexCount)
-						else: #It should be a triangle since blender doesn't support ngons, or the user chose not to triangulate
-							createTriFace(self, vertexCount)
+						if len(face.v)==4: #It's a quad and is exported as one
+							vertexOrder = [face.v[0].index, face.v[1].index, face.v[2].index, face.v[3].index]
+							createQuadFace(self, vertexOrder)
+						else: #It should be a triangle since Blender doesn't support ngons, or the face was a triangle
+							vertexOrder = [face.v[0].index, face.v[1].index, face.v[2].index]
+							createTriFace(self, vertexOrder)
 
 		faces.setAttribute("shaderlist", "%s" %(shaderlist))
 				
