@@ -268,7 +268,7 @@ class I3d:
 		#3 0
 		#2 1
 		for vert in mesh.verts:
-			print(vert.co.x, vert.index)
+			#print(vert.co, vert.index)
 			v = self.doc.createElement("v")
 			v.setAttribute("c", "%f %f %f" %(vert.co.x, vert.co.z, -vert.co.y))
 			verts.appendChild(v)
@@ -290,10 +290,9 @@ class I3d:
 				shaderlist = "Default"
 			
 			for face in mesh.faces:
-
 				def createTriFace(self, vertexOrder):
 					i3dt = self.doc.createElement("f")
-					i3dt.setAttribute("vi", "%i %i %i" %(vertexOrder[0], vertexOrder[1], vertexOrder[2]))
+					i3dt.setAttribute("vi", "%i %i %i" %(face.v[vertexOrder[0]].index, face.v[vertexOrder[1]].index, face.v[vertexOrder[2]].index))
 					if exportVertexColors and mesh.vertexColors:
 						realColorR = []
 						realColorG = []
@@ -310,10 +309,10 @@ class I3d:
 						#How does it even work????? There are no examples!!!
 						#for i in range(self.texturCount):
 							#i3dt.setAttribute("t%i" % i, "%f %f %f %f %f %f" % (face.uv[0].x, face.uv[0].y, face.uv[1].x, face.uv[1].y, face.uv[2].x, face.uv[2].y))
-						i3dt.setAttribute("t0", "%f %f %f %f %f %f" %(face.uv[0].x, face.uv[0].y, face.uv[1].x, face.uv[1].y, face.uv[2].x, face.uv[2].y))
+						i3dt.setAttribute("t0", "%f %f %f %f %f %f" %(face.uv[vertexOrder[0]].x, face.uv[vertexOrder[0]].y, face.uv[vertexOrder[1]].x, face.uv[vertexOrder[1]].y, face.uv[vertexOrder[2]].x, face.uv[vertexOrder[2]].y))
 					if exportNormals:
 						if face.smooth:
-							i3dt.setAttribute("n", "%f %f %f %f %f %f %f %f %f" %(face.v[0].no.x, face.v[0].no.z, -face.v[0].no.y, face.v[1].no.x, face.v[1].no.z, -face.v[1].no.y, face.v[2].no.x, face.v[2].no.z, -face.v[2].no.y))
+							i3dt.setAttribute("n", "%f %f %f %f %f %f %f %f %f" %(face.v[vertexOrder[0]].no.x, face.v[vertexOrder[0]].no.z, -face.v[vertexOrder[0]].no.y, face.v[vertexOrder[1]].no.x, face.v[vertexOrder[1]].no.z, -face.v[vertexOrder[1]].no.y, face.v[vertexOrder[2]].no.x, face.v[vertexOrder[2]].no.z, -face.v[vertexOrder[2]].no.y))
 						else:
 							i3dt.setAttribute("n", "%f %f %f %f %f %f %f %f %f" %(face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y))
 					i3dt.setAttribute("ci", "%i" %(materialCount-1))
@@ -321,7 +320,7 @@ class I3d:
 
 				def createQuadFace(self, vertexOrder):
 					i3dt = self.doc.createElement("f")
-					i3dt.setAttribute("vi", "%i %i %i %i" %(vertexOrder[0], vertexOrder[1], vertexOrder[2], vertexOrder[3]))
+					i3dt.setAttribute("vi", "%i %i %i %i" %(face.v[vertexOrder].index, face.v[vertexOrder].index, face.v[vertexOrder].index, face.v[vertexOrder].index))
 					if exportVertexColors and mesh.vertexColors:
 						realColorR = []
 						realColorG = []
@@ -353,21 +352,21 @@ class I3d:
 						if (face.v[0].co - face.v[2].co).length < (face.v[1].co - face.v[3].co).length:
 							#2103 would be the pattern for how Maya writes faces counter clockwise
 							#Blender pattern is 0123 clockwise
-							vertexOrder = [face.v[0].index, face.v[1].index, face.v[2].index] #The UV maps are fucked by the vertex order fix that!!!!
+							vertexOrder = [2, 3, 0] #The UV maps are fucked by the vertex order fix that!!!! 320
 							createTriFace(self, vertexOrder)
-							vertexOrder = [face.v[0].index, face.v[2].index, face.v[3].index]
+							vertexOrder = [0, 1, 2]
 							createTriFace(self, vertexOrder)
 						else:
-							vertexOrder = [face.v[0].index, face.v[1].index, face.v[3].index]
+							vertexOrder = [0, 1, 2]
 							createTriFace(self, vertexOrder)
-							vertexOrder = [face.v[1].index, face.v[2].index, face.v[3].index]
+							vertexOrder = [2, 3, 0]
 							createTriFace(self, vertexOrder)
 					else:
 						if len(face.v)==4: #It's a quad and is exported as one
-							vertexOrder = [face.v[0].index, face.v[1].index, face.v[2].index, face.v[3].index]
+							vertexOrder = [0, 1, 2, 3]
 							createQuadFace(self, vertexOrder)
 						else: #It should be a triangle since Blender doesn't support ngons, or the face was a triangle
-							vertexOrder = [face.v[0].index, face.v[1].index, face.v[2].index]
+							vertexOrder = [0, 1, 2]
 							createTriFace(self, vertexOrder)
 
 		faces.setAttribute("shaderlist", "%s" %(shaderlist))
