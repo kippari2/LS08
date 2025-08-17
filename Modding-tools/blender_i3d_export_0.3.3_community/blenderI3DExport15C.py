@@ -26,7 +26,7 @@ Note!
 -If youre computer explodes there was probably something wrong with this exporter.
 """
 
-from Blender import Scene, Mesh, Window, sys, Mathutils, Draw, Image, BGL, Get, Material, Text, Texture, Get, ShowHelp, Object
+from Blender import Scene, Mesh, Window, sys, Mathutils, Draw, Image, BGL, Get, Material, Text, Texture, Get, ShowHelp, Object, Curve
 import BPyMessages
 import bpy
 import math
@@ -205,7 +205,14 @@ class I3d:
 			node.setAttribute("depthMapResolution", "%i" %lamp.bufferSize)
 			node.setAttribute("coneAngle", "%f" %(lamp.getSpotSize()))
 			node.setAttribute("dropOff", "%f" %(lamp.getSpotBlend()*5))#dropOff seems to be between 0 and 5 right?
-
+		elif obj.type == "Curve":
+			curve = obj.getData()
+			if curve.isNurb():
+				node = self.doc.createElement("Shape")
+				self.addCurve(curve)
+				node.setAttribute("ref", "%s" %(curve.name))
+			else:
+				print("ERROR: can't export curve %s with type %s" %(obj.name, curve.getType()))
 
 		if not node is None:
 			node.setAttribute("name", obj.getName())
@@ -246,7 +253,21 @@ class I3d:
 								node.setAttribute(attr.nodeName, attr.nodeValue)
 								i = i+1
 		else:
-			print("WARNING: cant export %s: %s" %(obj.type, obj.getName()))
+			print("ERROR: cant export %s: %s" %(obj.type, obj.getName()))
+
+	def addCurve(self, curve):
+		controlVerts = self.doc.createElement("NurbsCurve")
+		controlVerts.setAttribute("name", "%s" %curve.name)
+		controlVerts.setAttribute("degree", "%s" %curve.getResolu())
+		if curve.isCyclic():
+			form = "close"
+		else:
+			form = "open"
+		controlVerts.setAttribute("form", "%s" %form)
+		print(len(curve)) #Wtf is going on??????
+		for i in range(len(curve:
+			print(curve[0][i])
+		self.shapes.appendChild(controlVerts)
 
 	def addMesh(self, mesh):
 		faces = self.doc.createElement("Faces")
@@ -261,12 +282,6 @@ class I3d:
 		materialCount = 0
 		shaderlist = ""
 
-		#Maya adds vertices in a zig-zag pattern starting from the bottom, like this:
-		#2 3
-		#0 1
-		#Blender does it in a clockwise rotation starting from the top, like this:
-		#3 0
-		#2 1
 		for vert in mesh.verts:
 			#print(vert.co, vert.index)
 			v = self.doc.createElement("v")
@@ -350,8 +365,6 @@ class I3d:
 						faceCount = faceCount + 1
 						vertexCount = 4
 						if (face.v[0].co - face.v[2].co).length < (face.v[1].co - face.v[3].co).length:
-							#2103 would be the pattern for how Maya writes faces counter clockwise
-							#Blender pattern is 0123 clockwise
 							vertexOrder = [2, 3, 0]
 							createTriFace(self, vertexOrder)
 							vertexOrder = [0, 1, 2]
