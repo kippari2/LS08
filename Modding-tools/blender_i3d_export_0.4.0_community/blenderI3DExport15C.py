@@ -10,7 +10,7 @@ Tooltip: 'Export to a GIANTS i3D file'
 __author__ = "Richard Gracik - Morc, Kippari2 (KLS Mods)"
 __url__ = ("biskupovska stranka, http://176.101.178.133:370/, http://themorc.gihub.io/",
 "Kippari2 Github, https://github.com/kippari2/")
-__version__ = "0.3.3"
+__version__ = "0.4.0"
 __email__ = "r.gracik@gmail.com, kipparizz34@gmail.com"
 __bpydoc__ = """\
 Exports to Giants .i3d file. Based on Morc's modified 4.1.2 exporter.
@@ -39,7 +39,7 @@ false = 0
 class I3d:
 	def __init__(self, name="untitled"):
 		if verboseLogging:
-			print("LS2009 Mods community i3D 1.5 exporter version 0.3.3")
+			print("LS2009 Mods community i3D 1.5 exporter version 0.4.0")
 			print("enabled export options (1=true, 0=false)")
 			exportOptionsToPrint = {
 				"modifiers": exportModifiers,
@@ -70,7 +70,7 @@ class I3d:
 		self.root.appendChild(self.asset)
 		exportProgram = self.doc.createElement("Export")
 		exportProgram.setAttribute("program", "Blender %s.%s" %(str(Get("version"))[:1], str(Get("version"))[-2:]))
-		exportProgram.setAttribute("version", "0.3.3")
+		exportProgram.setAttribute("version", "0.4.0")
 		self.asset.appendChild(exportProgram)
 		
 		self.files = self.doc.createElement("Files")
@@ -143,17 +143,29 @@ class I3d:
 				me.getFromObject(obj)
 				self.meshesToClear.append(me)
 			node = self.doc.createElement("Shape")
-			self.addMesh(me)
+			materialList = ""
+			if len(obj.getMaterials()) > 0:
+				materialList = obj.getMaterials()
+				print("materials for object %s are linked to object" %obj.getName())
+			else:
+				materialList = me.materials
+				print("materials for object %s are linked to mesh" %obj.getName())
+			self.addMesh(me, materialList)
 			node.setAttribute("ref", "%s" %(me.name))
 
-			#print(len(obj.getMaterials()))
-			#Materials per object is confusing to implement
-			#It's hard to find the variables needed to pull this off
+			"""print(len(obj.getMaterials()))
+			print(obj.getMaterials())
+			objMats = obj.getMaterials()
+			for mater in objMats:
+				print(objMats[0])
+				print(mater.getRGBCol())
+			Materials per object is confusing to implement
+			It's hard to find the variables needed to pull this off"""
 			
 			#Shading propertys stored per object in Giants: getting them from first blender material
-			if len(me.materials) > 0:
-				if me.materials[0]:
-					mat = me.materials[0]
+			if len(materialList) > 0:
+				if materialList[0]:
+					mat = materialList[0]
 					if mat.getMode() & Material.Modes['SHADOWBUF']:
 						node.setAttribute("castsShadows", "true")
 					else:
@@ -204,7 +216,7 @@ class I3d:
 			node.setAttribute("depthMapBias", "%f" %(lamp.bias/1000))
 			node.setAttribute("depthMapResolution", "%i" %lamp.bufferSize)
 			node.setAttribute("coneAngle", "%f" %(lamp.getSpotSize()))
-			node.setAttribute("dropOff", "%f" %(lamp.getSpotBlend()*5))#dropOff seems to be between 0 and 5 right?
+			node.setAttribute("dropOff", "%f" %(lamp.getSpotBlend()*5)) #dropOff seems to be between 0 and 5 right?
 		elif obj.type == "Curve":
 			curve = obj.getData()
 			if curve.isNurb():
@@ -216,7 +228,6 @@ class I3d:
 
 		if not node is None:
 			node.setAttribute("name", obj.getName())
-			
 			# getLocation("localspace") seems to be buggy!
 			# http://blenderartists.org/forum/showthread.php?t=117421
 			localMat = Mathutils.Matrix(obj.matrixLocal)
@@ -264,12 +275,17 @@ class I3d:
 		else:
 			form = "open"
 		controlVerts.setAttribute("form", "%s" %form)
-		print(len(curve)) #Wtf is going on??????
-		for i in range(len(curve:
-			print(curve[0][i])
+		#Giants Engine will read multiple curves within an object as one curve
+		#Use separate curve objects if you want more than one curve
+		if len(curve) > 1:
+			print("WARNING: no more than 1 curve per object supported in object %s" %curve.name)
+		for i in range(len(curve[0])):
+			cv = self.doc.createElement("cv")
+			cv.setAttribute("c", "%f %f %f" %(curve[0][i][0], curve[0][i][2], -curve[0][i][1]))
+			controlVerts.appendChild(cv)
 		self.shapes.appendChild(controlVerts)
 
-	def addMesh(self, mesh):
+	def addMesh(self, mesh, materialList):
 		faces = self.doc.createElement("Faces")
 		ifs = self.doc.createElement("IndexedFaceSet")
 		self.lastShapeId = self.lastShapeId + 1
@@ -292,9 +308,10 @@ class I3d:
 			print("adding mesh %s with %i vertices" %(mesh.name, len(mesh.verts)))
 		
 		#print "mesh Mats: ",mesh.materials
-		if len(mesh.materials) == 0:
+		if len(materialList) == 0:
 			print("WARNING: mesh %s has no material -> can't export properly" %mesh.name)
-		for mat in mesh.materials:
+			print(materialList)
+		for mat in materialList:
 			materialCount = materialCount + 1
 			self.addMaterial(mat, materialCount)
 			if not mat is None and shaderlist == "":
@@ -408,7 +425,7 @@ class I3d:
 				duplicateMaterial = true
 		if not duplicateMaterial:
 			if verboseLogging:
-				print("adding material %s" %(mat.name))
+				print("adding material %s" %mat.name)
 
 			m = self.doc.createElement("Material")
 			m.setAttribute("name", mat.name)
@@ -418,15 +435,15 @@ class I3d:
 			if mat.getAlpha() < 1:
 				m.setAttribute("alphaBlending", "true")
 			if mat.getSpec() > 0:
-				m.setAttribute("specularColor", "%f %f %f" %(mat.specR*mat.spec/2, mat.specG*mat.spec/2, mat.specB*mat.spec/2))
+				m.setAttribute("specularColor", "%f %f %f" %(mat.getSpecCol()[0]*mat.getSpec()/2, mat.getSpecCol()[1]*mat.getSpec()/2, mat.getSpecCol()[2]*mat.getSpec()/2))
 			if mat.getHardness() > 0:
-				m.setAttribute("cosPower", "%i" %(mat.getHardness()))
+				m.setAttribute("cosPower", "%i" %mat.getHardness())
 			if mat.getEmit() > 0:
-				m.setAttribute("emissiveColor", "%f %f %f" %(mat.getRGBCol()[0]*mat.emit/2, mat.getRGBCol()[1]*mat.emit/2, mat.getRGBCol()[2]*mat.emit/2))
+				m.setAttribute("emissiveColor", "%f %f %f" %(mat.getRGBCol()[0]*mat.getEmit()/2, mat.getRGBCol()[1]*mat.getEmit()/2, mat.getRGBCol()[2]*mat.getEmit()/2))
 			if mat.getMode() & Material.Modes['NOMIST']:
 				m.setAttribute("allowFog", "false")
 			if mat.getAmb() > 0:
-				m.setAttribute("ambientColor", "%f %f %f" %(mat.amb, mat.amb, mat.amb)) #mat.getRGBCol()[0]*mat.amb
+				m.setAttribute("ambientColor", "%f %f %f" %(mat.getAmb(), mat.getAmb(), mat.getAmb())) #mat.getRGBCol()[0]*mat.amb
 
 			texturN = 0
 			texturCount = 0
