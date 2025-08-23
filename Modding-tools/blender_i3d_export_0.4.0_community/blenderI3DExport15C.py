@@ -143,24 +143,21 @@ class I3d:
 				me.getFromObject(obj)
 				self.meshesToClear.append(me)
 			node = self.doc.createElement("Shape")
+
+			#I was unable to find anything to check which material link is active
+			#As a result, materials linked to object take priority even if the link is not active
+
 			materialList = ""
 			if len(obj.getMaterials()) > 0:
 				materialList = obj.getMaterials()
-				print("materials for object %s are linked to object" %obj.getName())
+				if verboseLogging:
+					print("materials for object %s are linked to object" %obj.getName())
 			else:
 				materialList = me.materials
-				print("materials for object %s are linked to mesh" %obj.getName())
+				if verboseLogging:
+					print("materials for object %s are linked to mesh" %obj.getName())
 			self.addMesh(me, materialList)
 			node.setAttribute("ref", "%s" %(me.name))
-
-			"""print(len(obj.getMaterials()))
-			print(obj.getMaterials())
-			objMats = obj.getMaterials()
-			for mater in objMats:
-				print(objMats[0])
-				print(mater.getRGBCol())
-			Materials per object is confusing to implement
-			It's hard to find the variables needed to pull this off"""
 			
 			#Shading propertys stored per object in Giants: getting them from first blender material
 			if len(materialList) > 0:
@@ -382,14 +379,14 @@ class I3d:
 						faceCount = faceCount + 1
 						vertexCount = 4
 						if (face.v[0].co - face.v[2].co).length < (face.v[1].co - face.v[3].co).length:
-							vertexOrder = [2, 3, 0]
-							createTriFace(self, vertexOrder)
 							vertexOrder = [0, 1, 2]
+							createTriFace(self, vertexOrder)
+							vertexOrder = [2, 3, 0]
 							createTriFace(self, vertexOrder)
 						else:
-							vertexOrder = [0, 1, 2]
+							vertexOrder = [1, 2, 3]
 							createTriFace(self, vertexOrder)
-							vertexOrder = [2, 3, 0]
+							vertexOrder = [3, 0, 1]
 							createTriFace(self, vertexOrder)
 					else:
 						if len(face.v)==4: #It's a quad and is exported as one
