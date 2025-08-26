@@ -39,10 +39,11 @@ Known issues
 Change log
 ----------
 
-0.4.0 (16.8.2025)
+0.4.0 (26.8.2025)
 ----------------------
  - Added NURBS curve support (used for path creation)
  - Added materials per object support
+ - Added armature support
  - Optimized mesh creation
 
 0.3.2 (14.8.2025)

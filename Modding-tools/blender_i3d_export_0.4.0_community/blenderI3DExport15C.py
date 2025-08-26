@@ -92,14 +92,18 @@ class I3d:
 		self.userAttributes = self.doc.createElement("UserAttributes")
 		self.root.appendChild(self.userAttributes)
 		self.meshesToClear = []
+		self.boneNames = None
 	
 	def setTranslation(self, node, pos):
 		node.setAttribute("translation", "%f %f %f" %(pos[0], pos[2], -pos[1]))
 	#Somethings not right
 	#Get mesh first to make testing visual
-	def setRotation(self, node, rot, rotX90):
+	def setRotation(self, node, rot, rotX90, armature=false):
+		#print(rot[0], rot[1], rot[2])
+		ro1, ro2, ro3 = rot[0], rot[2], -rot[1]
 		rot[0], rot[1], rot[2] = math.degrees(rot[0]), math.degrees(rot[2]), math.degrees(-rot[1])
-		
+		if armature:
+			rot[0], rot[1], rot[2] = ro1, ro2, ro3
 		RotationMatrix= Mathutils.RotationMatrix
 		MATRIX_IDENTITY_3x3 = Mathutils.Matrix([1.0,0.0,0.0],[0.0,1.0,0.0],[0.0,0.0,1.0])
 		x,y,z = rot[0]%360,rot[1]%360,rot[2]%360 # Clamp all values between 0 and 360, values outside this raise an error
@@ -156,8 +160,17 @@ class I3d:
 				materialList = me.materials
 				if verboseLogging:
 					print("materials for object %s are linked to mesh" %obj.getName())
-			self.addMesh(me, materialList)
-			node.setAttribute("ref", "%s" %(me.name))
+			self.addMesh(me, materialList, self.boneNames)
+			node.setAttribute("ref", "%s" %me.name)
+
+			if self.boneNames is not None:
+				skinBinds = ""
+				for bn in self.boneNames:
+					if skinBinds == "":
+						skinBinds = bn
+					else:
+						skinBinds = "%s %s" %(skinBinds, bn)
+				node.setAttribute("skinBindNodes", "%s" %skinBinds)
 			
 			#Shading propertys stored per object in Giants: getting them from first blender material
 			if len(materialList) > 0:
@@ -178,6 +191,7 @@ class I3d:
 			node = self.doc.createElement("TransformGroup")
 		elif obj.type == "Armature":
 			node = self.doc.createElement("TransformGroup")
+			self.boneNames = self.addArmature(node, obj.getData(), obj)
 		elif obj.type == "Camera":
 			rotX90=1
 			node = self.doc.createElement("Camera")
@@ -282,18 +296,66 @@ class I3d:
 			controlVerts.appendChild(cv)
 		self.shapes.appendChild(controlVerts)
 
-	def addMesh(self, mesh, materialList):
+	def addArmature(self, parentNode, arm, obj):
+		#print("adding armature %s" %(arm.name))
+		boneNameIndex = []
+		for bone in arm.bones.values():
+			if bone.hasParent()==0:
+				def addBone(self, parent, bone):
+					#print "adding bone %s to %s"%(bone.name, parent.getAttribute("name"))
+					boneNode = self.doc.createElement("TransformGroup")
+					boneNode.setAttribute("name", bone.name)
+
+					pa = bone.parent
+					#pmat is the matrix of the bone in parent space
+					#ported from md5 exporter
+					if not pa is None:
+						pmat = Mathutils.Matrix(bone.matrix['ARMATURESPACE'])*Mathutils.Matrix(pa.matrix['ARMATURESPACE']).invert()
+						print(pmat)
+					else:
+						pmat = Mathutils.Matrix(bone.matrix['ARMATURESPACE'])
+						print(pmat)
+
+					boneNameIndex.append(bone.name)
+
+					self.setTranslation(boneNode, pmat.translationPart())
+					self.setRotation(boneNode, pmat.rotationPart().toEuler(), true, true)
+
+					#make -z point towards tail
+					#dosnt work jet, but wait until:
+					#md5Exort
+					#god this api is ugly, bonespace, armaturespace matrices have different dimensions
+
+					#mbs = bone.matrix["BONESPACE"]
+					#print(bone.name)
+					#print(mbs)
+					#print(mbs.rotationPart().toEuler())
+					#self.setRotationDeg(boneNode, mbs.rotationPart().toEuler(), false)
+
+					parent.appendChild(boneNode)
+					for b in bone.children:
+						addBone(self, boneNode, b)
+				addBone(self, parentNode, bone)
+		return boneNameIndex
+
+	def addMesh(self, mesh, materialList, boneNames=None):
 		faces = self.doc.createElement("Faces")
 		ifs = self.doc.createElement("IndexedFaceSet")
 		self.lastShapeId = self.lastShapeId + 1
 		ifs.setAttribute("name", mesh.name)
 		self.shapes.appendChild(ifs)
 		verts = self.doc.createElement("Vertices")
+		if not boneNames is None and exportSkinWeights:
+			#print(boneNames)
+			skinWeights = self.doc.createElement("SkinWeights")
 		
 		faceCount = 0
 		vertexCount = 0
 		materialCount = 0
 		shaderlist = ""
+
+		if verboseLogging:
+			print("adding mesh %s with %i vertices" %(mesh.name, len(mesh.verts)))
 
 		for vert in mesh.verts:
 			#print(vert.co, vert.index)
@@ -301,9 +363,32 @@ class I3d:
 			v.setAttribute("c", "%f %f %f" %(vert.co.x, vert.co.z, -vert.co.y))
 			verts.appendChild(v)
 
-		if verboseLogging:
-			print("adding mesh %s with %i vertices" %(mesh.name, len(mesh.verts)))
-		
+			if not boneNames is None and exportSkinWeights:
+				vGroups = getVGroup(vert.index, mesh)
+				boneWeights = ""
+				boneIndices = ""
+				for vg in vGroups: #Getting the number and names of vertex groups
+					bi = 0
+					#print(vg[1])
+					for bn in boneNames:
+						#print(bn)
+						if vg[0] == bn:
+							#print("yes")
+							if boneWeights == "":
+								boneWeights = "%f" %vg[1]
+								boneIndices = "%i" %bi
+							else:
+								boneWeights = "%s %f" %(boneWeights, vg[1])
+								boneIndices = "%s %i" %(boneIndices, bi)
+						bi = bi + 1
+				cv = self.doc.createElement("cv")
+				cv.setAttribute("w", boneWeights)
+				cv.setAttribute("bi", boneIndices)
+				skinWeights.appendChild(cv)
+
+		ifs.appendChild(verts)
+		ifs.appendChild(skinWeights)
+
 		#print "mesh Mats: ",mesh.materials
 		if len(materialList) == 0:
 			print("WARNING: mesh %s has no material -> can't export properly" %mesh.name)
@@ -314,7 +399,7 @@ class I3d:
 			if not mat is None and shaderlist == "":
 				shaderlist = mat.name
 			elif not mat is None:
-				shaderlist = shaderlist + ", %s" %(mat.name)
+				shaderlist = "%s, %s" %(shaderlist, mat.name)
 			else:
 				shaderlist = "Default"
 			
@@ -397,8 +482,6 @@ class I3d:
 							createTriFace(self, vertexOrder)
 
 		faces.setAttribute("shaderlist", "%s" %(shaderlist))
-				
-		ifs.appendChild(verts)
 		ifs.appendChild(faces)
 		
 		return self.lastShapeId
@@ -589,6 +672,22 @@ class I3d:
 
 #-------END of i3d class------------------------------------------------------------------
 
+#get a list of vertexGroups and asociated weights this vertex belonges to
+def getVGroup(vertIndex, mesh):
+	groupWeight = []
+	#print "getVGroup in %s"%mesh.name
+	for group in mesh.getVertGroupNames():
+		#print("group %s" %group)
+		singleElement = mesh.getVertsFromGroup(group, 1, [vertIndex])
+		if len(singleElement)==1:
+			groupWeight.append({0:group, 1:singleElement[0][1]})
+		elif len(singleElement)==0:
+			#print "nul?"
+			pass
+		else:
+			print "SCARRY!"
+	return groupWeight
+
 #GUI      GUI      GUI      GUI      GUI      GUI      GUI      GUI      GUI      GUI
 #  GUI      GUI      GUI      GUI      GUI      GUI      GUI      GUI      GUI      GUI
 #    GUI      GUI      GUI      GUI      GUI      GUI      GUI      GUI      GUI      GUI
@@ -616,7 +715,7 @@ evtVerboseLogging = 17
 
 #Toggle button states
 exportModifiers = true
-#exportSkinWeights = true
+exportSkinWeights = true
 exportVertexColors = true
 exportUVMaps = true
 exportSelection = false
