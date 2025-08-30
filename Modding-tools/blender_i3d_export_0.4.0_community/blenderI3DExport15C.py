@@ -7,13 +7,12 @@ Group: 'Export'
 Tooltip: 'Export to a GIANTS i3D file'
 """
 
-__author__ = "Richard Gracik - Morc, Kippari2 (KLS Mods)"
-__url__ = ("biskupovska stranka, http://176.101.178.133:370/, http://themorc.gihub.io/",
-"Kippari2 Github, https://github.com/kippari2/")
+__author__ = "Kippari2 (KLS Mods)"
+__url__ = ("Kippari2 Github, https://github.com/kippari2/")
 __version__ = "0.4.0"
-__email__ = "r.gracik@gmail.com, kipparizz34@gmail.com"
+__email__ = "kipparizz34@gmail.com"
 __bpydoc__ = """\
-Exports to Giants .i3d file. Based on Morc's modified 4.1.2 exporter.
+Exports to Giants .i3d file.
 
 Usage:
 -Place this script in %appdata%/Blender Foundation/Blender/.blender/scripts directory.
@@ -43,6 +42,7 @@ class I3d:
 			print("enabled export options (1=true, 0=false)")
 			exportOptionsToPrint = {
 				"modifiers": exportModifiers,
+				"skin weights": exportSkinWeights,
 				"vertex colors": exportVertexColors,
 				"UV maps": exportUVMaps,
 				"triangulated": exportTriangulated,
@@ -96,10 +96,8 @@ class I3d:
 	
 	def setTranslation(self, node, pos):
 		node.setAttribute("translation", "%f %f %f" %(pos[0], pos[2], -pos[1]))
-	#Somethings not right
-	#Get mesh first to make testing visual
+
 	def setRotation(self, node, rot, rotX90, armature=false):
-		#print(rot[0], rot[1], rot[2])
 		ro1, ro2, ro3 = rot[0], rot[2], -rot[1]
 		rot[0], rot[1], rot[2] = math.degrees(rot[0]), math.degrees(rot[2]), math.degrees(-rot[1])
 		if armature:
@@ -111,11 +109,9 @@ class I3d:
 		ymat = RotationMatrix(y,3,'y')
 		zmat = RotationMatrix(z,3,'z')
 		eRot = (xmat*(zmat * (ymat * MATRIX_IDENTITY_3x3))).toEuler()
-		
 		if rotX90:
-			node.setAttribute("rotation", "%f %f %f" %(eRot.x-90, eRot.y, eRot.z))
-		else:
-			node.setAttribute("rotation", "%f %f %f" %(eRot.x, eRot.y, eRot.z))
+			eRot.x = eRot.x-rotX90
+		node.setAttribute("rotation", "%f %f %f" %(eRot.x, eRot.y, eRot.z))
 	
 	
 	def addObject(self, obj): #Adds a scene node.
@@ -135,7 +131,7 @@ class I3d:
 						break
 			if parentNode == self.scene:
 				print("parent not found for object %s" % obj.getName())
-		rotX90=0
+		rotX90 = false
 
 		if verboseLogging:
 			print("adding object %s with type %s" %(obj.getName(), obj.getType()))
@@ -148,11 +144,10 @@ class I3d:
 				self.meshesToClear.append(me)
 			node = self.doc.createElement("Shape")
 
-			#I was unable to find anything to check which material link is active
-			#As a result, materials linked to object take priority even if the link is not active
-
+			#Materials are linked using a colbit
+			#1 for mat per object, 0 for obData
 			materialList = ""
-			if len(obj.getMaterials()) > 0:
+			if len(obj.getMaterials()) > 0 and obj.colbits == 1:
 				materialList = obj.getMaterials()
 				if verboseLogging:
 					print("materials for object %s are linked to object" %obj.getName())
@@ -171,8 +166,10 @@ class I3d:
 					else:
 						skinBinds = "%s %s" %(skinBinds, bn)
 				node.setAttribute("skinBindNodes", "%s" %skinBinds)
+				if verboseLogging:
+					print("object %s has skin binds: %s" %(obj.getName(), skinBinds))
 			
-			#Shading propertys stored per object in Giants: getting them from first blender material
+			#Shading properties are stored per object in Giants: getting them from first Blender material
 			if len(materialList) > 0:
 				if materialList[0]:
 					mat = materialList[0]
@@ -193,13 +190,13 @@ class I3d:
 			node = self.doc.createElement("TransformGroup")
 			self.boneNames = self.addArmature(node, obj.getData(), obj)
 		elif obj.type == "Camera":
-			rotX90=1
+			rotX90 = true
 			node = self.doc.createElement("Camera")
 			node.setAttribute("fov", "%f" %(obj.getData().lens))
 			node.setAttribute("nearClip", "%f" %(obj.getData().clipStart))
 			node.setAttribute("farClip", "%f" %(obj.getData().clipEnd))
 		elif obj.type == "Lamp":
-			rotX90=1
+			rotX90 = true
 			node = self.doc.createElement("Light")
 			lamp = obj.getData()
 			lampType = ["point", "directional", "spot", "ambient"]
@@ -249,6 +246,7 @@ class I3d:
 			parentNode.appendChild(node)
 
 			#Parse ScriptLink file and merge xml into i3d
+			#Most likely broken, untested due to lack in skills :/
 			for sl in obj.getScriptLinks("FrameChanged") + obj.getScriptLinks("Render") + obj.getScriptLinks("Redraw") + obj.getScriptLinks("ObjectUpdate") + obj.getScriptLinks("ObDataUpdate"):
 				if sl.endswith(".i3d"):
 					if verboseLogging:
@@ -305,32 +303,29 @@ class I3d:
 					#print "adding bone %s to %s"%(bone.name, parent.getAttribute("name"))
 					boneNode = self.doc.createElement("TransformGroup")
 					boneNode.setAttribute("name", bone.name)
-
 					pa = bone.parent
 					#pmat is the matrix of the bone in parent space
-					#ported from md5 exporter
+					#Ported from md5 exporter
 					if not pa is None:
 						pmat = Mathutils.Matrix(bone.matrix['ARMATURESPACE'])*Mathutils.Matrix(pa.matrix['ARMATURESPACE']).invert()
-						print(pmat)
 					else:
 						pmat = Mathutils.Matrix(bone.matrix['ARMATURESPACE'])
-						print(pmat)
 
 					boneNameIndex.append(bone.name)
-
+					#rt1, rt2, rt3 = pmat.translationPart()
+					#realTranslation = [rt1, rt3, rt2]
+					#print(realTranslation)
+					#del rt1, rt2, rt3
 					self.setTranslation(boneNode, pmat.translationPart())
-					self.setRotation(boneNode, pmat.rotationPart().toEuler(), true, true)
+					#rr1, rr2, rr3 = pmat.rotationPart().toEuler()
+					#realRotation = [rr1, rr3, rr2]
+					#del rr1, rr2, rr3
+					self.setRotation(boneNode, pmat.rotationPart().toEuler(), false, true)
 
-					#make -z point towards tail
-					#dosnt work jet, but wait until:
-					#md5Exort
-					#god this api is ugly, bonespace, armaturespace matrices have different dimensions
-
-					#mbs = bone.matrix["BONESPACE"]
-					#print(bone.name)
-					#print(mbs)
-					#print(mbs.rotationPart().toEuler())
-					#self.setRotationDeg(boneNode, mbs.rotationPart().toEuler(), false)
+					#Make Y point where the Z axis points
+					#Tried rotX90 while swapping Z translation to be the Y, but some things break because of it
+					#Maybe I could do some disgusting hack that uses a rotated temp mesh and skeleton, but that sounds like problems waiting to happen
+					#Plsss hellppp I have 0 clue how to do this :(
 
 					parent.appendChild(boneNode)
 					for b in bone.children:
@@ -362,32 +357,59 @@ class I3d:
 			v = self.doc.createElement("v")
 			v.setAttribute("c", "%f %f %f" %(vert.co.x, vert.co.z, -vert.co.y))
 			verts.appendChild(v)
+			#if verboseLogging:
+				#sys.stdout.write("lol")
 
 			if not boneNames is None and exportSkinWeights:
-				vGroups = getVGroup(vert.index, mesh)
+				vertexGroups = getVGroup(vert.index, mesh)
 				boneWeights = ""
 				boneIndices = ""
-				for vg in vGroups: #Getting the number and names of vertex groups
+				calculateWeights = []
+				weights = []
+				for vg in vertexGroups:
 					bi = 0
 					#print(vg[1])
 					for bn in boneNames:
 						#print(bn)
-						if vg[0] == bn:
-							#print("yes")
-							if boneWeights == "":
-								boneWeights = "%f" %vg[1]
+						if vg[0] == bn and not vg[1] == 0:
+							calculateWeights.append(vg[1])
+							if boneIndices == "":
 								boneIndices = "%i" %bi
 							else:
-								boneWeights = "%s %f" %(boneWeights, vg[1])
 								boneIndices = "%s %i" %(boneIndices, bi)
 						bi = bi + 1
+
+				#Blender does not adhere to the rule where all weights add up to 1 and we have to recalculate them
+				#Weight to weight ratios have to be kept the same
+				weightCount = len(calculateWeights)
+				if weightCount  > 1:
+					weightSum = sum(calculateWeights)
+					if weightSum < 1:
+						increment = (1-weightSum)/weightCount
+						weights = [w + increment for w in calculateWeights]
+					if weightSum > 1:
+						subtract = (weightSum-1)/weightCount
+						weights = [w - subtract for w in calculateWeights]
+				elif weightCount  == 1 and calculateWeights[0] < 1:
+					weights = [1]
+				else:
+					weights = calculateWeights
+
+				for w in weights:
+					if boneWeights == "":
+						boneWeights = "%f" %w
+					else:
+						boneWeights = "%s %f" %(boneWeights, w)
+				#print(calculateWeights)
+				#print(boneWeights)
 				cv = self.doc.createElement("cv")
 				cv.setAttribute("w", boneWeights)
 				cv.setAttribute("bi", boneIndices)
 				skinWeights.appendChild(cv)
 
 		ifs.appendChild(verts)
-		ifs.appendChild(skinWeights)
+		if not boneNames is None and exportSkinWeights:
+			ifs.appendChild(skinWeights)
 
 		#print "mesh Mats: ",mesh.materials
 		if len(materialList) == 0:
@@ -413,7 +435,7 @@ class I3d:
 						realColorB = []
 						for vertCol in face.col:
 							for i in range(3):
-								realColorR.append(vertCol.r/255.0) #Not sure if the vertex colors are supposed to look so washed
+								realColorR.append(vertCol.r/255.0) #Not sure if vertex colors are supposed to look so washed
 								realColorG.append(vertCol.g/255.0)
 								realColorB.append(vertCol.b/255.0)
 								#print("vertex %i %f %f %f" %(i, realColorR[i], realColorG[i], realColorB[i]))
@@ -672,16 +694,16 @@ class I3d:
 
 #-------END of i3d class------------------------------------------------------------------
 
-#get a list of vertexGroups and asociated weights this vertex belonges to
+#get a list of vertexGroups and asociated weights this vertex belongs to
 def getVGroup(vertIndex, mesh):
 	groupWeight = []
 	#print "getVGroup in %s"%mesh.name
 	for group in mesh.getVertGroupNames():
 		#print("group %s" %group)
 		singleElement = mesh.getVertsFromGroup(group, 1, [vertIndex])
-		if len(singleElement)==1:
+		if len(singleElement) == 1:
 			groupWeight.append({0:group, 1:singleElement[0][1]})
-		elif len(singleElement)==0:
+		elif len(singleElement) == 0:
 			#print "nul?"
 			pass
 		else:
@@ -708,7 +730,7 @@ evtExportProjectPath = 10
 evtRelativePath = 11
 evtDoNothing = 12
 evtExportProjectPath = 13
-#evtExportSkinWeights = 14 Armature and skin weights here we come!!!
+evtExportSkinWeights = 14
 evtExportVertexColors = 15
 evtExportUVMaps = 16
 evtVerboseLogging = 17
@@ -730,7 +752,7 @@ guiExport = 0
 guiRelativePath = 0
 guiBrows = 0
 guiExportModifiers = 0
-#guiExportSkinWeights = 0
+guiExportSkinWeights = 0
 guiExportVertexColors = 0
 guiExportUVMaps = 0
 guiExportNormals = 0
@@ -763,12 +785,13 @@ except:
 def gui():
 	global evtExport, evtNameChanged, evtBrows, evtPathChangedActive, evtDoNothing
 	global exportPath, texturePath, folderName
-	global guiExport, guiBrows, guiRelativePath, guiExportModifiers, guiExportVertexColors, guiExportUVMaps, guiExportTriangulated, guiExportNormals, guiExportSelection, guiVeboseLogging, guiAddObjExtension, guiAddMatExtension, guiLogo
+	global guiExport, guiBrows, guiRelativePath, guiExportModifiers, guiExportSkinWeights, guiExportVertexColors, guiExportUVMaps, guiExportTriangulated, guiExportNormals, guiExportSelection, guiVeboseLogging, guiAddObjExtension, guiAddMatExtension, guiLogo
 	
 	guiAddObjExtension = Draw.PushButton("Add obj script link", evtAddObjExtension, 10, 250, 150, 25, "Add a text file for more i3d object properties and link it to the active object via script links")
 	guiAddMatExtension = Draw.PushButton("Add mat script link", evtAddMatExtension, 175, 250, 155, 25, "Add a text file for more i3d material properties and link it to the active material via script links")
 	guiExportModifiers = Draw.Toggle("Apply modifiers", evtExportModifiers, 10, 215, 100, 25, exportModifiers, "Apply modifiers to exported objects")
-	guiExportVertexColors = Draw.Toggle("Vertex colors", evtExportVertexColors, 120, 215, 100, 25, exportVertexColors, "Export vertex colors")
+	guiExportSkinWeights = Draw.Toggle("Skin weights", evtExportSkinWeights, 120, 215, 100, 25, exportSkinWeights, "Export skin weights for armature")
+	guiExportVertexColors = Draw.Toggle("Vertex colors", evtExportVertexColors, 230, 215, 100, 25, exportVertexColors, "Export vertex colors")
 	guiExportUVMaps = Draw.Toggle("UV maps", evtExportUVMaps, 10, 180, 100, 25, exportUVMaps, "Export UV textue maps")
 	guiExportTriangulated = Draw.Toggle("Triangulate", evtExportTriangulated, 120, 180, 100, 25, exportTriangulated, "Convert quads to triangles")
 	guiExportNormals = Draw.Toggle("Normals", evtExportNormals, 230, 180, 100, 25, exportNormals, "Export vertex normals")
@@ -806,7 +829,7 @@ def event(evt, val):  # Function that handles keyboard and mouse events
 			ShowHelp("i3dExporter.py")
 
 def buttonEvt(evt):
-	global evtExport, evtNameChanged, evtBrows, evtExportSelection, evtDoNothing, exportModifiers, exportVertexColors, exportUVMaps, exportTriangulated, exportNormals, exportSelection, verboseLogging, exportProjectPath, relative, folderName
+	global evtExport, evtNameChanged, evtBrows, evtExportSelection, evtDoNothing, exportModifiers, exportSkinWeights, exportVertexColors, exportUVMaps, exportTriangulated, exportNormals, exportSelection, verboseLogging, exportProjectPath, relative, folderName
 	global exportPath, texturePath
 	global guiPopup
 	if evt == evtExport:
@@ -832,6 +855,9 @@ def buttonEvt(evt):
 		Draw.Redraw(1)
 	if evt == evtExportModifiers:
 		exportModifiers = 1 - exportModifiers
+		Draw.Redraw(1)
+	if evt == evtExportSkinWeights:
+		exportSkinWeights = 1 - exportSkinWeights
 		Draw.Redraw(1)
 	if evt == evtExportVertexColors:
 		exportVertexColors = 1 - exportVertexColors
