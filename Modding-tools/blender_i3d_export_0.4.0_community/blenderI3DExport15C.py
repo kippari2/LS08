@@ -20,9 +20,9 @@ Usage:
 -Choose Export -> GIANTS Engine 0.2.5 - 4.0.0 (.i3d)...
 
 Note!
--If your object turns out pink you probably forgot to asign a material.
+-If your object turns out pink you probably forgot to assign a material.
 -If its black you probably forgot to UV unwrap it.
--If youre computer explodes there was probably something wrong with this exporter.
+-If your computer explodes there was probably something wrong with this exporter.
 """
 
 from Blender import Scene, Mesh, Window, sys, Mathutils, Draw, Image, BGL, Get, Material, Text, Texture, Get, ShowHelp, Object, Curve
@@ -84,6 +84,9 @@ class I3d:
 		self.scene = self.doc.createElement("Scene")
 		self.root.appendChild(self.scene)
 		self.lastNodeId = 0
+		self.faces = None
+		self.ifs = None
+		self.skinWeights = None
 		#self.texturCount = 0
 		self.animation = self.doc.createElement("Animation")
 		self.animationSets = self.doc.createElement("AnimationSets")
@@ -110,9 +113,8 @@ class I3d:
 		zmat = RotationMatrix(z,3,'z')
 		eRot = (xmat*(zmat * (ymat * MATRIX_IDENTITY_3x3))).toEuler()
 		if rotX90:
-			eRot.x = eRot.x-rotX90
+			eRot.x = eRot.x-90
 		node.setAttribute("rotation", "%f %f %f" %(eRot.x, eRot.y, eRot.z))
-	
 	
 	def addObject(self, obj): #Adds a scene node.
 		#print("add object %s" %(obj.getName()))
@@ -142,7 +144,7 @@ class I3d:
 				me = bpy.data.meshes.new()
 				me.getFromObject(obj)
 				self.meshesToClear.append(me)
-			node = self.doc.createElement("Shape")
+			node = self.doc.createElement("Shape") #Fix the damned 0 verts mesh thing!!!!!
 
 			#Materials are linked using a colbit
 			#1 for mat per object, 0 for obData
@@ -170,17 +172,16 @@ class I3d:
 					print("object %s has skin binds: %s" %(obj.getName(), skinBinds))
 			
 			#Shading properties are stored per object in Giants: getting them from first Blender material
-			if len(materialList) > 0:
-				if materialList[0]:
-					mat = materialList[0]
-					if mat.getMode() & Material.Modes['SHADOWBUF']:
-						node.setAttribute("castsShadows", "true")
-					else:
-						node.setAttribute("castsShadows", "false")
-					if mat.getMode() & Material.Modes['SHADOW']:
-						node.setAttribute("receiveShadows", "true")
-					else:
-						node.setAttribute("receiveShadows", "false")
+			if not materialList == "" and materialList[0]:
+				mat = materialList[0]
+				if mat.getMode() & Material.Modes['SHADOWBUF']:
+					node.setAttribute("castsShadows", "true")
+				else:
+					node.setAttribute("castsShadows", "false")
+				if mat.getMode() & Material.Modes['SHADOW']:
+					node.setAttribute("receiveShadows", "true")
+				else:
+					node.setAttribute("receiveShadows", "false")
 			else:
 				node.setAttribute("castsShadows", "false")
 				node.setAttribute("receiveShadows", "false")
@@ -196,7 +197,7 @@ class I3d:
 			node.setAttribute("nearClip", "%f" %(obj.getData().clipStart))
 			node.setAttribute("farClip", "%f" %(obj.getData().clipEnd))
 		elif obj.type == "Lamp":
-			rotX90 = true
+			rotX90 = true #Lamps suffer from similar orientation issue as bones do
 			node = self.doc.createElement("Light")
 			lamp = obj.getData()
 			lampType = ["point", "directional", "spot", "ambient"]
@@ -224,7 +225,7 @@ class I3d:
 			node.setAttribute("depthMapBias", "%f" %(lamp.bias/1000))
 			node.setAttribute("depthMapResolution", "%i" %lamp.bufferSize)
 			node.setAttribute("coneAngle", "%f" %(lamp.getSpotSize()))
-			node.setAttribute("dropOff", "%f" %(lamp.getSpotBlend()*5)) #dropOff seems to be between 0 and 5 right?
+			node.setAttribute("dropOff", "%f" %(lamp.getSpotBlend()*5))
 		elif obj.type == "Curve":
 			curve = obj.getData()
 			if curve.isNurb():
@@ -236,12 +237,10 @@ class I3d:
 
 		if not node is None:
 			node.setAttribute("name", obj.getName())
-			# getLocation("localspace") seems to be buggy!
-			# http://blenderartists.org/forum/showthread.php?t=117421
+			#getLocation("localspace") seems to be buggy!
+			#http://blenderartists.org/forum/showthread.php?t=117421
 			localMat = Mathutils.Matrix(obj.matrixLocal)
-			#self.setTranslation(node, obj.getLocation("localspace"))
 			self.setTranslation(node, localMat.translationPart())			
-			#self.setRotation(node, localMat.rotationPart().toEuler(), rotX90)
 			self.setRotation(node, obj.getEuler("localspace"), rotX90)
 			parentNode.appendChild(node)
 
@@ -280,11 +279,11 @@ class I3d:
 		controlVerts.setAttribute("name", "%s" %curve.name)
 		controlVerts.setAttribute("degree", "%s" %curve.getResolu())
 		if curve.isCyclic():
-			form = "close"
+			form = "close" #There is a third form called "periodic", but it can't be visualized in Blender
 		else:
 			form = "open"
 		controlVerts.setAttribute("form", "%s" %form)
-		#Giants Engine will read multiple curves within an object as one curve
+		#Giants Engine will read multiple curves within an object as one continuous curve
 		#Use separate curve objects if you want more than one curve
 		if len(curve) > 1:
 			print("WARNING: no more than 1 curve per object supported in object %s" %curve.name)
@@ -303,29 +302,22 @@ class I3d:
 					#print "adding bone %s to %s"%(bone.name, parent.getAttribute("name"))
 					boneNode = self.doc.createElement("TransformGroup")
 					boneNode.setAttribute("name", bone.name)
-					pa = bone.parent
-					#pmat is the matrix of the bone in parent space
+					parentBone = bone.parent
+					#parentMatrix is the matrix of the bone in parent space
 					#Ported from md5 exporter
-					if not pa is None:
-						pmat = Mathutils.Matrix(bone.matrix['ARMATURESPACE'])*Mathutils.Matrix(pa.matrix['ARMATURESPACE']).invert()
+					if not parentBone is None:
+						parentMatrix = Mathutils.Matrix(bone.matrix['ARMATURESPACE'])*Mathutils.Matrix(parentBone.matrix['ARMATURESPACE']).invert()
 					else:
-						pmat = Mathutils.Matrix(bone.matrix['ARMATURESPACE'])
-
+						parentMatrix = Mathutils.Matrix(bone.matrix['ARMATURESPACE'])
 					boneNameIndex.append(bone.name)
-					#rt1, rt2, rt3 = pmat.translationPart()
-					#realTranslation = [rt1, rt3, rt2]
-					#print(realTranslation)
-					#del rt1, rt2, rt3
-					self.setTranslation(boneNode, pmat.translationPart())
-					#rr1, rr2, rr3 = pmat.rotationPart().toEuler()
-					#realRotation = [rr1, rr3, rr2]
-					#del rr1, rr2, rr3
-					self.setRotation(boneNode, pmat.rotationPart().toEuler(), false, true)
+					self.setTranslation(boneNode, parentMatrix.translationPart())
+					self.setRotation(boneNode, parentMatrix.rotationPart().toEuler(), false, true)
 
 					#Make Y point where the Z axis points
 					#Tried rotX90 while swapping Z translation to be the Y, but some things break because of it
 					#Maybe I could do some disgusting hack that uses a rotated temp mesh and skeleton, but that sounds like problems waiting to happen
 					#Plsss hellppp I have 0 clue how to do this :(
+					#Another thing to do would be inverse kinematics, but there's literally 0 i3d docs on that
 
 					parent.appendChild(boneNode)
 					for b in bone.children:
@@ -333,21 +325,99 @@ class I3d:
 				addBone(self, parentNode, bone)
 		return boneNameIndex
 
+	def addSkinWeights(self, mesh, vert):
+		vertexGroups = getVGroup(vert.index, mesh)
+		boneWeights = ""
+		boneIndices = ""
+		weights = []
+		for vg in vertexGroups:
+			bi = 0
+			#print(vg[1])
+			for bn in self.boneNames:
+				#print(bn)
+				if vg[0] == bn and not vg[1] == 0:
+					weights.append(vg[1])
+					if boneIndices == "":
+						boneIndices = "%i" %bi
+					else:
+						boneIndices = "%s %i" %(boneIndices, bi)
+				bi = bi + 1
+		newWeights = calculateWeights(weights)
+		for w in newWeights:
+			if boneWeights == "":
+				boneWeights = "%f" %w
+			else:
+				boneWeights = "%s %f" %(boneWeights, w)
+		#print(calculateWeights)
+		#print(boneWeights)
+		cv = self.doc.createElement("cv")
+		cv.setAttribute("w", boneWeights)
+		cv.setAttribute("bi", boneIndices)
+		self.skinWeights.appendChild(cv)
+
+	def createTriFace(self, mesh, vertexOrder, face):
+		tri = self.doc.createElement("f")
+		tri.setAttribute("vi", "%i %i %i" %(face.v[vertexOrder[0]].index, face.v[vertexOrder[1]].index, face.v[vertexOrder[2]].index))
+		if exportVertexColors and mesh.vertexColors:
+			realColorR = []
+			realColorG = []
+			realColorB = []
+			for vertCol in face.col:
+				for i in range(3):
+					realColorR.append(vertCol.r/255.0) #Not sure if vertex colors are supposed to look so washed
+					realColorG.append(vertCol.g/255.0)
+					realColorB.append(vertCol.b/255.0)
+					#print("vertex %i %f %f %f" %(i, realColorR[i], realColorG[i], realColorB[i]))
+			tri.setAttribute("c", "%f %f %f %f %f %f %f %f %f" %(realColorR[0], realColorG[0], realColorB[0], realColorR[1], realColorG[1], realColorB[1], realColorR[2], realColorG[2], realColorB[2]))
+		if evtExportUVMaps and mesh.faceUV:
+			#Attempetd multi-UV support, but it only loads one texture (yes the other one was transparent and coords correct)
+			#How does it even work????? There are no examples!!!
+			#for i in range(self.texturCount):
+				#tri.setAttribute("t%i" % i, "%f %f %f %f %f %f" % (face.uv[0].x, face.uv[0].y, face.uv[1].x, face.uv[1].y, face.uv[2].x, face.uv[2].y))
+			tri.setAttribute("t0", "%f %f %f %f %f %f" %(face.uv[vertexOrder[0]].x, face.uv[vertexOrder[0]].y, face.uv[vertexOrder[1]].x, face.uv[vertexOrder[1]].y, face.uv[vertexOrder[2]].x, face.uv[vertexOrder[2]].y))
+		if exportNormals:
+			if face.smooth:
+				tri.setAttribute("n", "%f %f %f %f %f %f %f %f %f" %(face.v[vertexOrder[0]].no.x, face.v[vertexOrder[0]].no.z, -face.v[vertexOrder[0]].no.y, face.v[vertexOrder[1]].no.x, face.v[vertexOrder[1]].no.z, -face.v[vertexOrder[1]].no.y, face.v[vertexOrder[2]].no.x, face.v[vertexOrder[2]].no.z, -face.v[vertexOrder[2]].no.y))
+			else:
+				tri.setAttribute("n", "%f %f %f %f %f %f %f %f %f" %(face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y))
+		tri.setAttribute("ci", "%i" %(face.mat if face.mat is not None else 0))
+		self.faces.appendChild(tri)
+
+	def createQuadFace(self, mesh, vertexOrder, face):
+		quad = self.doc.createElement("f")
+		quad.setAttribute("vi", "%i %i %i %i" %(face.v[vertexOrder[0]].index, face.v[vertexOrder[1]].index, face.v[vertexOrder[2]].index, face.v[vertexOrder[3]].index))
+		if exportVertexColors and mesh.vertexColors:
+			realColorR = []
+			realColorG = []
+			realColorB = []
+			for vertCol in face.col:
+				for i in range(4):
+					realColorR.append(vertCol.r/255.0)
+					realColorG.append(vertCol.g/255.0)
+					realColorB.append(vertCol.b/255.0)
+					#print("vertex %i %f %f %f" %(i, realColorR[i], realColorG[i], realColorB[i]))
+			quad.setAttribute("c", "%f %f %f %f %f %f %f %f %f %f %f %f" %(realColorR[0], realColorG[0], realColorB[0], realColorR[1], realColorG[1], realColorB[1], realColorR[2], realColorG[2], realColorB[2], realColorR[3], realColorG[3], realColorB[3]))
+		if evtExportUVMaps and mesh.faceUV:
+			#for i in range(self.texturCount):
+				#quad.setAttribute("t%i" % i, "%f %f %f %f %f %f" % (face.uv[0].x, face.uv[0].y, face.uv[1].x, face.uv[1].y, face.uv[2].x, face.uv[2].y))
+			quad.setAttribute("t0", "%f %f %f %f %f %f %f %f" %(face.uv[vertexOrder[0]].x, face.uv[vertexOrder[0]].y, face.uv[vertexOrder[1]].x, face.uv[vertexOrder[1]].y, face.uv[vertexOrder[2]].x, face.uv[vertexOrder[2]].y, face.uv[vertexOrder[3]].x, face.uv[vertexOrder[3]].y))
+		if exportNormals:
+			if face.smooth:
+				quad.setAttribute("n", "%f %f %f %f %f %f %f %f %f %f %f %f" %(face.v[vertexOrder[0]].no.x, face.v[vertexOrder[0]].no.z, -face.v[vertexOrder[0]].no.y, face.v[vertexOrder[1]].no.x, face.v[vertexOrder[1]].no.z, -face.v[vertexOrder[1]].no.y, face.v[vertexOrder[2]].no.x, face.v[vertexOrder[2]].no.z, -face.v[vertexOrder[2]].no.y, face.v[vertexOrder[3]].no.x, face.v[vertexOrder[3]].no.z, -face.v[vertexOrder[3]].no.y))
+			else:
+				quad.setAttribute("n", "%f %f %f %f %f %f %f %f %f %f %f %f" %(face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y))
+		quad.setAttribute("ci", "%i" %(face.mat if face.mat is not None else 0))
+		self.faces.appendChild(quad)
+
 	def addMesh(self, mesh, materialList, boneNames=None):
-		faces = self.doc.createElement("Faces")
-		ifs = self.doc.createElement("IndexedFaceSet")
+		self.faces = self.doc.createElement("Faces")
+		self.ifs = self.doc.createElement("IndexedFaceSet")
 		self.lastShapeId = self.lastShapeId + 1
-		ifs.setAttribute("name", mesh.name)
-		self.shapes.appendChild(ifs)
-		verts = self.doc.createElement("Vertices")
+		self.ifs.setAttribute("name", mesh.name)
+		self.shapes.appendChild(self.ifs)
+		self.verts = self.doc.createElement("Vertices")
 		if not boneNames is None and exportSkinWeights:
-			#print(boneNames)
-			skinWeights = self.doc.createElement("SkinWeights")
-		
-		faceCount = 0
-		vertexCount = 0
-		materialCount = 0
-		shaderlist = ""
+			self.skinWeights = self.doc.createElement("SkinWeights")
 
 		if verboseLogging:
 			print("adding mesh %s with %i vertices" %(mesh.name, len(mesh.verts)))
@@ -356,159 +426,51 @@ class I3d:
 			#print(vert.co, vert.index)
 			v = self.doc.createElement("v")
 			v.setAttribute("c", "%f %f %f" %(vert.co.x, vert.co.z, -vert.co.y))
-			verts.appendChild(v)
+			self.verts.appendChild(v)
 			#if verboseLogging:
 				#sys.stdout.write("lol")
-
 			if not boneNames is None and exportSkinWeights:
-				vertexGroups = getVGroup(vert.index, mesh)
-				boneWeights = ""
-				boneIndices = ""
-				calculateWeights = []
-				weights = []
-				for vg in vertexGroups:
-					bi = 0
-					#print(vg[1])
-					for bn in boneNames:
-						#print(bn)
-						if vg[0] == bn and not vg[1] == 0:
-							calculateWeights.append(vg[1])
-							if boneIndices == "":
-								boneIndices = "%i" %bi
-							else:
-								boneIndices = "%s %i" %(boneIndices, bi)
-						bi = bi + 1
+				self.addSkinWeights(mesh, vert)
 
-				#Blender does not adhere to the rule where all weights add up to 1 and we have to recalculate them
-				#Weight to weight ratios have to be kept the same
-				weightCount = len(calculateWeights)
-				if weightCount  > 1:
-					weightSum = sum(calculateWeights)
-					if weightSum < 1:
-						increment = (1-weightSum)/weightCount
-						weights = [w + increment for w in calculateWeights]
-					if weightSum > 1:
-						subtract = (weightSum-1)/weightCount
-						weights = [w - subtract for w in calculateWeights]
-				elif weightCount  == 1 and calculateWeights[0] < 1:
-					weights = [1]
-				else:
-					weights = calculateWeights
-
-				for w in weights:
-					if boneWeights == "":
-						boneWeights = "%f" %w
-					else:
-						boneWeights = "%s %f" %(boneWeights, w)
-				#print(calculateWeights)
-				#print(boneWeights)
-				cv = self.doc.createElement("cv")
-				cv.setAttribute("w", boneWeights)
-				cv.setAttribute("bi", boneIndices)
-				skinWeights.appendChild(cv)
-
-		ifs.appendChild(verts)
-		if not boneNames is None and exportSkinWeights:
-			ifs.appendChild(skinWeights)
-
-		#print "mesh Mats: ",mesh.materials
-		if len(materialList) == 0:
-			print("WARNING: mesh %s has no material -> can't export properly" %mesh.name)
-			print(materialList)
+		shaderlist = ""
 		for mat in materialList:
-			materialCount = materialCount + 1
-			self.addMaterial(mat, materialCount)
+			self.addMaterial(mat)
 			if not mat is None and shaderlist == "":
 				shaderlist = mat.name
 			elif not mat is None:
 				shaderlist = "%s, %s" %(shaderlist, mat.name)
 			else:
 				shaderlist = "Default"
+		self.faces.setAttribute("shaderlist", "%s" %(shaderlist))
 			
-			for face in mesh.faces:
-				def createTriFace(self, vertexOrder):
-					i3dt = self.doc.createElement("f")
-					i3dt.setAttribute("vi", "%i %i %i" %(face.v[vertexOrder[0]].index, face.v[vertexOrder[1]].index, face.v[vertexOrder[2]].index))
-					if exportVertexColors and mesh.vertexColors:
-						realColorR = []
-						realColorG = []
-						realColorB = []
-						for vertCol in face.col:
-							for i in range(3):
-								realColorR.append(vertCol.r/255.0) #Not sure if vertex colors are supposed to look so washed
-								realColorG.append(vertCol.g/255.0)
-								realColorB.append(vertCol.b/255.0)
-								#print("vertex %i %f %f %f" %(i, realColorR[i], realColorG[i], realColorB[i]))
-						i3dt.setAttribute("c", "%f %f %f %f %f %f %f %f %f" %(realColorR[0], realColorG[0], realColorB[0], realColorR[1], realColorG[1], realColorB[1], realColorR[2], realColorG[2], realColorB[2]))
-					if evtExportUVMaps and mesh.faceUV:
-						#Attempetd multi-UV support, but it only loads one texture (yes the other one was transparent and coords correct)
-						#How does it even work????? There are no examples!!!
-						#for i in range(self.texturCount):
-							#i3dt.setAttribute("t%i" % i, "%f %f %f %f %f %f" % (face.uv[0].x, face.uv[0].y, face.uv[1].x, face.uv[1].y, face.uv[2].x, face.uv[2].y))
-						i3dt.setAttribute("t0", "%f %f %f %f %f %f" %(face.uv[vertexOrder[0]].x, face.uv[vertexOrder[0]].y, face.uv[vertexOrder[1]].x, face.uv[vertexOrder[1]].y, face.uv[vertexOrder[2]].x, face.uv[vertexOrder[2]].y))
-					if exportNormals:
-						if face.smooth:
-							i3dt.setAttribute("n", "%f %f %f %f %f %f %f %f %f" %(face.v[vertexOrder[0]].no.x, face.v[vertexOrder[0]].no.z, -face.v[vertexOrder[0]].no.y, face.v[vertexOrder[1]].no.x, face.v[vertexOrder[1]].no.z, -face.v[vertexOrder[1]].no.y, face.v[vertexOrder[2]].no.x, face.v[vertexOrder[2]].no.z, -face.v[vertexOrder[2]].no.y))
-						else:
-							i3dt.setAttribute("n", "%f %f %f %f %f %f %f %f %f" %(face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y))
-					i3dt.setAttribute("ci", "%i" %(materialCount-1))
-					faces.appendChild(i3dt)
+		for face in mesh.faces:
+			if exportTriangulated and len(face.v) == 4: #It's a quad and user chose to triangulate along shortest edge
+				if (face.v[0].co - face.v[2].co).length < (face.v[1].co - face.v[3].co).length:
+					vertexOrder = [0, 1, 2]
+					self.createTriFace(mesh, vertexOrder, face)
+					vertexOrder = [2, 3, 0]
+					self.createTriFace(mesh, vertexOrder, face)
+				else:
+					vertexOrder = [1, 2, 3]
+					self.createTriFace(mesh, vertexOrder, face)
+					vertexOrder = [3, 0, 1]
+					self.createTriFace(mesh, vertexOrder, face)
+			else:
+				if len(face.v)==4: #It's a quad and is exported as one
+					vertexOrder = [0, 1, 2, 3]
+					self.createQuadFace(mesh, vertexOrder, face)
+				else: #It should be a triangle since Blender doesn't support ngons, or the face is a triangle
+					vertexOrder = [0, 1, 2]
+					self.createTriFace(mesh, vertexOrder, face)
 
-				def createQuadFace(self, vertexOrder):
-					i3dt = self.doc.createElement("f")
-					i3dt.setAttribute("vi", "%i %i %i %i" %(face.v[vertexOrder[0]].index, face.v[vertexOrder[1]].index, face.v[vertexOrder[2]].index, face.v[vertexOrder[3]].index))
-					if exportVertexColors and mesh.vertexColors:
-						realColorR = []
-						realColorG = []
-						realColorB = []
-						for vertCol in face.col:
-							for i in range(4):
-								realColorR.append(vertCol.r/255.0)
-								realColorG.append(vertCol.g/255.0)
-								realColorB.append(vertCol.b/255.0)
-								#print("vertex %i %f %f %f" %(i, realColorR[i], realColorG[i], realColorB[i]))
-						i3dt.setAttribute("c", "%f %f %f %f %f %f %f %f %f %f %f %f" %(realColorR[0], realColorG[0], realColorB[0], realColorR[1], realColorG[1], realColorB[1], realColorR[2], realColorG[2], realColorB[2], realColorR[3], realColorG[3], realColorB[3]))
-					if evtExportUVMaps and mesh.faceUV:
-						#for i in range(self.texturCount):
-							#i3dt.setAttribute("t%i" % i, "%f %f %f %f %f %f" % (face.uv[0].x, face.uv[0].y, face.uv[1].x, face.uv[1].y, face.uv[2].x, face.uv[2].y))
-						i3dt.setAttribute("t0", "%f %f %f %f %f %f %f %f" %(face.uv[vertexOrder[0]].x, face.uv[vertexOrder[0]].y, face.uv[vertexOrder[1]].x, face.uv[vertexOrder[1]].y, face.uv[vertexOrder[2]].x, face.uv[vertexOrder[2]].y, face.uv[vertexOrder[3]].x, face.uv[vertexOrder[3]].y))
-					if exportNormals:
-						if face.smooth:
-							i3dt.setAttribute("n", "%f %f %f %f %f %f %f %f %f %f %f %f" %(face.v[vertexOrder[0]].no.x, face.v[vertexOrder[0]].no.z, -face.v[vertexOrder[0]].no.y, face.v[vertexOrder[1]].no.x, face.v[vertexOrder[1]].no.z, -face.v[vertexOrder[1]].no.y, face.v[vertexOrder[2]].no.x, face.v[vertexOrder[2]].no.z, -face.v[vertexOrder[2]].no.y, face.v[vertexOrder[3]].no.x, face.v[vertexOrder[3]].no.z, -face.v[vertexOrder[3]].no.y))
-						else:
-							i3dt.setAttribute("n", "%f %f %f %f %f %f %f %f %f %f %f %f" %(face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y))
-					i3dt.setAttribute("ci", "%i" %(materialCount-1))
-					faces.appendChild(i3dt)
-
-				if face.mat == materialCount-1:
-					faceCount = faceCount + 1
-					if exportTriangulated and len(face.v) == 4: #It's a quad and user chose to triangulate along shortest edge
-						faceCount = faceCount + 1
-						vertexCount = 4
-						if (face.v[0].co - face.v[2].co).length < (face.v[1].co - face.v[3].co).length:
-							vertexOrder = [0, 1, 2]
-							createTriFace(self, vertexOrder)
-							vertexOrder = [2, 3, 0]
-							createTriFace(self, vertexOrder)
-						else:
-							vertexOrder = [1, 2, 3]
-							createTriFace(self, vertexOrder)
-							vertexOrder = [3, 0, 1]
-							createTriFace(self, vertexOrder)
-					else:
-						if len(face.v)==4: #It's a quad and is exported as one
-							vertexOrder = [0, 1, 2, 3]
-							createQuadFace(self, vertexOrder)
-						else: #It should be a triangle since Blender doesn't support ngons, or the face was a triangle
-							vertexOrder = [0, 1, 2]
-							createTriFace(self, vertexOrder)
-
-		faces.setAttribute("shaderlist", "%s" %(shaderlist))
-		ifs.appendChild(faces)
+		self.ifs.appendChild(self.verts)
+		if not boneNames is None and exportSkinWeights:
+			self.ifs.appendChild(self.skinWeights)
+		self.ifs.appendChild(self.faces)
 		
 		return self.lastShapeId
 	
-	def addMaterial(self, mat, materialCount):
+	def addMaterial(self, mat):
 		duplicateMaterial = false
 		if mat is None:
 			if not self.defaultMat: #Create a nice pink default material
@@ -518,7 +480,7 @@ class I3d:
 				self.materials.appendChild(m)
 				self.defaultMat = 1
 				if verboseLogging:
-					print("no materials assigned -> added pink default material")
+					print("WARNING: no materials assigned -> added pink default material")
 			return self.defaultMat, false
 		
 		for m in self.materials.getElementsByTagName("Material"):
@@ -709,6 +671,25 @@ def getVGroup(vertIndex, mesh):
 		else:
 			print "SCARRY!"
 	return groupWeight
+
+#Blender does not adhere to the rule where all weights add up to 1 and we have to recalculate them
+#Weight to weight ratios have to be kept the same
+def calculateWeights(calculate):
+	calculated = []
+	weightCount = len(calculate)
+	if weightCount  > 1:
+		weightSum = sum(calculate)
+		if weightSum < 1:
+			increment = (1-weightSum)/weightCount
+			calculated = [w + increment for w in calculate]
+		if weightSum > 1:
+			subtract = (weightSum-1)/weightCount
+			calculated = [w - subtract for w in calculate]
+	elif weightCount  == 1 and calculate[0] < 1:
+		calculated = [1]
+	else:
+		calculated = calculate
+	return calculated
 
 #GUI      GUI      GUI      GUI      GUI      GUI      GUI      GUI      GUI      GUI
 #  GUI      GUI      GUI      GUI      GUI      GUI      GUI      GUI      GUI      GUI
