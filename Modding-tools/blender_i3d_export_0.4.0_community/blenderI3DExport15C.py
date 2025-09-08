@@ -8,21 +8,49 @@ Tooltip: 'Export to a GIANTS i3D file'
 """
 
 __author__ = "Kippari2 (KLS Mods)"
-__url__ = ("Kippari2 Github, https://github.com/kippari2/")
+__url__ = ("Kippari2 Github, https://github.com/kippari2/", "Published on, https://komeo.xyz/ls2009mods/")
 __version__ = "0.4.0"
 __email__ = "kipparizz34@gmail.com"
 __bpydoc__ = """\
 Exports to Giants .i3d file.
 
-Usage:
--Place this script in %appdata%/Blender Foundation/Blender/.blender/scripts directory.
--Open file menu in blender.
+Supported:<br>
+Objects<br>
+-Empty<br>
+-Lights (directional, spot, point)<br>
+-Camera (persp)<br>
+-NURBS curves<br>
+Mesh types<br>
+-Basic meshes<br>
+-Armature deform (skinned mesh)<br>
+Material specular shaders<br>
+-Phong<br>
+-CookTorr<br>
+Material color shaders<br>
+-Solid color (diffuse)<br>
+-Vertex color<br>
+-Emissive<br>
+-Transparent/transluscent (Ztransp)<br>
+-Ambient color<br>
+Material links<br>
+-Linked to object<br>
+-Linked to mesh<br>
+Image maps<br>
+-Texture<br>
+-Specular<br>
+-Emissive<br>
+-Normal
+
+Usage:<br>
+-Place this script in %appdata%/Blender Foundation/Blender/.blender/scripts directory.<br>
+-Open file menu in blender.<br>
 -Choose Export -> GIANTS Engine 0.2.5 - 4.0.0 (.i3d)...
 
-Note!
--If your object turns out pink you probably forgot to assign a material.
--If its black you probably forgot to UV unwrap it.
--If your computer explodes there was probably something wrong with this exporter.
+Note!<br>
+-Skin weights and modifiers options can't be used at the same time! This is due to the inability to exclude the armature modifier without actually deforming the mesh and causing headaches for you.<br>
+-If your object turns out pink you probably forgot to assign a material.<br>
+-If its black you probably forgot to UV unwrap it.<br>
+-Mat script and obj script links are not functional yet. I haven't figured out how they work.
 """
 
 from Blender import Scene, Mesh, Window, sys, Mathutils, Draw, Image, BGL, Get, Material, Text, Texture, Get, ShowHelp, Object, Curve
@@ -76,17 +104,13 @@ class I3d:
 		self.files = self.doc.createElement("Files")
 		self.root.appendChild(self.files)
 		self.materials = self.doc.createElement("Materials")
-		self.defaultMat = 0
+		self.defaultMat = false
 		self.root.appendChild(self.materials)
 		self.shapes = self.doc.createElement("Shapes")
 		self.root.appendChild(self.shapes)
-		self.lastShapeId = 0
 		self.scene = self.doc.createElement("Scene")
 		self.root.appendChild(self.scene)
-		self.lastNodeId = 0
-		self.faces = None
-		self.ifs = None
-		self.skinWeights = None
+		self.lastNodeId = 0 #Needed until obj script links gets reworked
 		#self.texturCount = 0
 		self.animation = self.doc.createElement("Animation")
 		self.animationSets = self.doc.createElement("AnimationSets")
@@ -115,6 +139,35 @@ class I3d:
 		if rotX90:
 			eRot.x = eRot.x-90
 		node.setAttribute("rotation", "%f %f %f" %(eRot.x, eRot.y, eRot.z))
+
+	#Parse ScriptLink file and merge xml into i3d
+	#Most likely broken, untested due to lack in skills :/
+	def addObjScriptLinks(self, obj):
+		for sl in obj.getScriptLinks("FrameChanged") + obj.getScriptLinks("Render") + obj.getScriptLinks("Redraw") + obj.getScriptLinks("ObjectUpdate") + obj.getScriptLinks("ObDataUpdate"):
+			if sl.endswith(".i3d"):
+				if verboseLogging:
+					print("parsing object script link %s" %sl)
+				xmlText = ""
+				#print Text.Get(sl).asLines()
+				for l in Text.Get(sl).asLines():
+					xmlText = xmlText + l.replace("i3dNodeId", "%i" %self.lastNodeId)
+				#print "xml: ",xmlText
+				#slDom = parseString(xmlText)
+				slDom = None
+				try:
+					slDom = parseString(xmlText)
+				except:
+					print("WARNING: cant parse object script link %s" %sl)
+				if not slDom is None:
+					for ua in slDom.getElementsByTagName("UserAttribute"):
+						self.userAttributes.appendChild(ua)
+
+					for st in slDom.getElementsByTagName("SceneType"):
+						i = 0
+						while i < st.attributes.length:
+							attr = st.attributes.item(i)
+							node.setAttribute(attr.nodeName, attr.nodeValue)
+							i = i+1
 	
 	def addObject(self, obj): #Adds a scene node.
 		#print("add object %s" %(obj.getName()))
@@ -140,24 +193,24 @@ class I3d:
 		
 		if obj.type == "Mesh":
 			me = obj.getData(mesh=1)
-			if exportModifiers and len(obj.modifiers) > 0: #TODO: exclude armature option when armature is supported
+			if exportModifiers and len(obj.modifiers) > 0: #Unfortunately, it seems like it is not possible to exclude armature form getting applied
 				me = bpy.data.meshes.new()
 				me.getFromObject(obj)
 				self.meshesToClear.append(me)
-			node = self.doc.createElement("Shape") #Fix the damned 0 verts mesh thing!!!!!
+			node = self.doc.createElement("Shape")
 
 			#Materials are linked using a colbit
 			#1 for mat per object, 0 for obData
-			materialList = ""
+			materialList = None
 			if len(obj.getMaterials()) > 0 and obj.colbits == 1:
 				materialList = obj.getMaterials()
 				if verboseLogging:
 					print("materials for object %s are linked to object" %obj.getName())
-			else:
+			elif len(me.materials) > 0 and obj.colbits == 0:
 				materialList = me.materials
 				if verboseLogging:
 					print("materials for object %s are linked to mesh" %obj.getName())
-			self.addMesh(me, materialList, self.boneNames)
+			self.addMesh(me, materialList)
 			node.setAttribute("ref", "%s" %me.name)
 
 			if self.boneNames is not None:
@@ -172,7 +225,7 @@ class I3d:
 					print("object %s has skin binds: %s" %(obj.getName(), skinBinds))
 			
 			#Shading properties are stored per object in Giants: getting them from first Blender material
-			if not materialList == "" and materialList[0]:
+			if not materialList is None and materialList[0]:
 				mat = materialList[0]
 				if mat.getMode() & Material.Modes['SHADOWBUF']:
 					node.setAttribute("castsShadows", "true")
@@ -243,34 +296,7 @@ class I3d:
 			self.setTranslation(node, localMat.translationPart())			
 			self.setRotation(node, obj.getEuler("localspace"), rotX90)
 			parentNode.appendChild(node)
-
-			#Parse ScriptLink file and merge xml into i3d
-			#Most likely broken, untested due to lack in skills :/
-			for sl in obj.getScriptLinks("FrameChanged") + obj.getScriptLinks("Render") + obj.getScriptLinks("Redraw") + obj.getScriptLinks("ObjectUpdate") + obj.getScriptLinks("ObDataUpdate"):
-				if sl.endswith(".i3d"):
-					if verboseLogging:
-						print("parsing object script link %s" %sl)
-					xmlText = ""
-					#print Text.Get(sl).asLines()
-					for l in Text.Get(sl).asLines():
-						xmlText = xmlText + l.replace("i3dNodeId", "%i" %self.lastNodeId)
-					#print "xml: ",xmlText			
-					#slDom = parseString(xmlText)
-					slDom = None
-					try:
-						slDom = parseString(xmlText)
-					except:
-						print("WARNING: cant parse object script link %s" %sl)
-					if not slDom is None:
-						for ua in slDom.getElementsByTagName("UserAttribute"):
-							self.userAttributes.appendChild(ua)
-		
-						for st in slDom.getElementsByTagName("SceneType"):
-							i = 0
-							while i < st.attributes.length:
-								attr = st.attributes.item(i)
-								node.setAttribute(attr.nodeName, attr.nodeValue)
-								i = i+1
+			self.addObjScriptLinks(obj)
 		else:
 			print("ERROR: cant export %s: %s" %(obj.type, obj.getName()))
 
@@ -279,7 +305,7 @@ class I3d:
 		controlVerts.setAttribute("name", "%s" %curve.name)
 		controlVerts.setAttribute("degree", "%s" %curve.getResolu())
 		if curve.isCyclic():
-			form = "close" #There is a third form called "periodic", but it can't be visualized in Blender
+			form = "close" #There is a third form called "periodic" that will be supported later
 		else:
 			form = "open"
 		controlVerts.setAttribute("form", "%s" %form)
@@ -296,32 +322,31 @@ class I3d:
 	def addArmature(self, parentNode, arm, obj):
 		#print("adding armature %s" %(arm.name))
 		boneNameIndex = []
+		def addBone(self, parent, bone):
+			#print "adding bone %s to %s"%(bone.name, parent.getAttribute("name"))
+			boneNode = self.doc.createElement("TransformGroup")
+			boneNode.setAttribute("name", bone.name)
+			parentBone = bone.parent
+			#parentMatrix is the matrix of the bone in parent space
+			#Ported from md5 exporter
+			if not parentBone is None:
+				parentMatrix = Mathutils.Matrix(bone.matrix['ARMATURESPACE'])*Mathutils.Matrix(parentBone.matrix['ARMATURESPACE']).invert()
+			else:
+				parentMatrix = Mathutils.Matrix(bone.matrix['ARMATURESPACE'])
+			boneNameIndex.append(bone.name)
+			self.setTranslation(boneNode, parentMatrix.translationPart())
+			self.setRotation(boneNode, parentMatrix.rotationPart().toEuler(), false, true)
+			#Make Y point where the Z axis points
+			#Tried rotX90 while swapping Z translation to be the Y, but some things break because of it
+			#Maybe I could do some disgusting hack that uses a rotated temp mesh and skeleton, but that sounds like problems waiting to happen
+			#Plsss hellppp I have 0 clue how to do this :(
+			#Another thing to do would be inverse kinematics, but there's literally 0 i3d docs on that
+			parent.appendChild(boneNode)
+			for b in bone.children:
+				addBone(self, boneNode, b)
+
 		for bone in arm.bones.values():
 			if bone.hasParent()==0:
-				def addBone(self, parent, bone):
-					#print "adding bone %s to %s"%(bone.name, parent.getAttribute("name"))
-					boneNode = self.doc.createElement("TransformGroup")
-					boneNode.setAttribute("name", bone.name)
-					parentBone = bone.parent
-					#parentMatrix is the matrix of the bone in parent space
-					#Ported from md5 exporter
-					if not parentBone is None:
-						parentMatrix = Mathutils.Matrix(bone.matrix['ARMATURESPACE'])*Mathutils.Matrix(parentBone.matrix['ARMATURESPACE']).invert()
-					else:
-						parentMatrix = Mathutils.Matrix(bone.matrix['ARMATURESPACE'])
-					boneNameIndex.append(bone.name)
-					self.setTranslation(boneNode, parentMatrix.translationPart())
-					self.setRotation(boneNode, parentMatrix.rotationPart().toEuler(), false, true)
-
-					#Make Y point where the Z axis points
-					#Tried rotX90 while swapping Z translation to be the Y, but some things break because of it
-					#Maybe I could do some disgusting hack that uses a rotated temp mesh and skeleton, but that sounds like problems waiting to happen
-					#Plsss hellppp I have 0 clue how to do this :(
-					#Another thing to do would be inverse kinematics, but there's literally 0 i3d docs on that
-
-					parent.appendChild(boneNode)
-					for b in bone.children:
-						addBone(self, boneNode, b)
 				addBone(self, parentNode, bone)
 		return boneNameIndex
 
@@ -332,9 +357,7 @@ class I3d:
 		weights = []
 		for vg in vertexGroups:
 			bi = 0
-			#print(vg[1])
 			for bn in self.boneNames:
-				#print(bn)
 				if vg[0] == bn and not vg[1] == 0:
 					weights.append(vg[1])
 					if boneIndices == "":
@@ -348,12 +371,10 @@ class I3d:
 				boneWeights = "%f" %w
 			else:
 				boneWeights = "%s %f" %(boneWeights, w)
-		#print(calculateWeights)
-		#print(boneWeights)
 		cv = self.doc.createElement("cv")
 		cv.setAttribute("w", boneWeights)
 		cv.setAttribute("bi", boneIndices)
-		self.skinWeights.appendChild(cv)
+		return cv
 
 	def createTriFace(self, mesh, vertexOrder, face):
 		tri = self.doc.createElement("f")
@@ -381,7 +402,7 @@ class I3d:
 			else:
 				tri.setAttribute("n", "%f %f %f %f %f %f %f %f %f" %(face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y))
 		tri.setAttribute("ci", "%i" %(face.mat if face.mat is not None else 0))
-		self.faces.appendChild(tri)
+		return tri
 
 	def createQuadFace(self, mesh, vertexOrder, face):
 		quad = self.doc.createElement("f")
@@ -407,33 +428,51 @@ class I3d:
 			else:
 				quad.setAttribute("n", "%f %f %f %f %f %f %f %f %f %f %f %f" %(face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y))
 		quad.setAttribute("ci", "%i" %(face.mat if face.mat is not None else 0))
-		self.faces.appendChild(quad)
+		return quad
 
-	def addMesh(self, mesh, materialList, boneNames=None):
-		self.faces = self.doc.createElement("Faces")
-		self.ifs = self.doc.createElement("IndexedFaceSet")
-		self.lastShapeId = self.lastShapeId + 1
-		self.ifs.setAttribute("name", mesh.name)
-		self.shapes.appendChild(self.ifs)
-		self.verts = self.doc.createElement("Vertices")
-		if not boneNames is None and exportSkinWeights:
-			self.skinWeights = self.doc.createElement("SkinWeights")
+	def addMesh(self, mesh, materialList):
+		faces = self.doc.createElement("Faces")
+		ifs = self.doc.createElement("IndexedFaceSet")
+		ifs.setAttribute("name", mesh.name)
+		self.shapes.appendChild(ifs)
+		verts = self.doc.createElement("Vertices")
+		if not self.boneNames is None and exportSkinWeights:
+			skinWeights = self.doc.createElement("SkinWeights")
 
 		if verboseLogging:
 			print("adding mesh %s with %i vertices" %(mesh.name, len(mesh.verts)))
 
 		for vert in mesh.verts:
-			#print(vert.co, vert.index)
 			v = self.doc.createElement("v")
 			v.setAttribute("c", "%f %f %f" %(vert.co.x, vert.co.z, -vert.co.y))
-			self.verts.appendChild(v)
-			#if verboseLogging:
-				#sys.stdout.write("lol")
-			if not boneNames is None and exportSkinWeights:
-				self.addSkinWeights(mesh, vert)
+			verts.appendChild(v)
+			if not self.boneNames is None and exportSkinWeights:
+				skinWeights.appendChild(self.addSkinWeights(mesh, vert))
+
+		def defineFace(self, face):
+			if exportTriangulated and len(face.v) == 4: #It's a quad and user chose to triangulate along shortest edge
+				if (face.v[0].co - face.v[2].co).length < (face.v[1].co - face.v[3].co).length:
+					vertexOrder = [0, 1, 2]
+					faces.appendChild(self.createTriFace(mesh, vertexOrder, face))
+					vertexOrder = [2, 3, 0]
+					faces.appendChild(self.createTriFace(mesh, vertexOrder, face))
+				else:
+					vertexOrder = [1, 2, 3]
+					faces.appendChild(self.createTriFace(mesh, vertexOrder, face))
+					vertexOrder = [3, 0, 1]
+					faces.appendChild(self.createTriFace(mesh, vertexOrder, face))
+			else:
+				if len(face.v)==4: #It's a quad and is exported as one
+					vertexOrder = [0, 1, 2, 3]
+					faces.appendChild(self.createQuadFace(mesh, vertexOrder, face))
+				else: #It should be a triangle since Blender doesn't support ngons, or the face is a triangle
+					vertexOrder = [0, 1, 2]
+					faces.appendChild(self.createTriFace(mesh, vertexOrder, face))
 
 		shaderlist = ""
+		materialCount = 0
 		for mat in materialList:
+			materialCount = materialCount + 1
 			self.addMaterial(mat)
 			if not mat is None and shaderlist == "":
 				shaderlist = mat.name
@@ -441,52 +480,106 @@ class I3d:
 				shaderlist = "%s, %s" %(shaderlist, mat.name)
 			else:
 				shaderlist = "Default"
-		self.faces.setAttribute("shaderlist", "%s" %(shaderlist))
-			
-		for face in mesh.faces:
-			if exportTriangulated and len(face.v) == 4: #It's a quad and user chose to triangulate along shortest edge
-				if (face.v[0].co - face.v[2].co).length < (face.v[1].co - face.v[3].co).length:
-					vertexOrder = [0, 1, 2]
-					self.createTriFace(mesh, vertexOrder, face)
-					vertexOrder = [2, 3, 0]
-					self.createTriFace(mesh, vertexOrder, face)
-				else:
-					vertexOrder = [1, 2, 3]
-					self.createTriFace(mesh, vertexOrder, face)
-					vertexOrder = [3, 0, 1]
-					self.createTriFace(mesh, vertexOrder, face)
-			else:
-				if len(face.v)==4: #It's a quad and is exported as one
-					vertexOrder = [0, 1, 2, 3]
-					self.createQuadFace(mesh, vertexOrder, face)
-				else: #It should be a triangle since Blender doesn't support ngons, or the face is a triangle
-					vertexOrder = [0, 1, 2]
-					self.createTriFace(mesh, vertexOrder, face)
+			#We could have done this a much faster and cleaner way, but the Giants engine just can't handle it when material indices are not in a particular order
+			#DON'T TOUCH THE LOGIC UNLESS YOU WANT TO HAVE HOLES IN YOUR MESH!!!
+			for face in mesh.faces:
+				if face.mat == materialCount-1:
+					defineFace(self, face)
 
-		self.ifs.appendChild(self.verts)
-		if not boneNames is None and exportSkinWeights:
-			self.ifs.appendChild(self.skinWeights)
-		self.ifs.appendChild(self.faces)
-		
-		return self.lastShapeId
-	
-	def addMaterial(self, mat):
-		duplicateMaterial = false
-		if mat is None:
-			if not self.defaultMat: #Create a nice pink default material
-				m = self.doc.createElement("Material")
-				m.setAttribute("name", "Default")
-				m.setAttribute("diffuseColor", "%f %f %f %f" %(1, 0, 1, 1))
-				self.materials.appendChild(m)
-				self.defaultMat = 1
+		faces.setAttribute("shaderlist", "%s" %(shaderlist))
+
+		ifs.appendChild(verts)
+		if not self.boneNames is None and exportSkinWeights:
+			ifs.appendChild(skinWeights)
+		ifs.appendChild(faces)
+
+	def addImageMaps(self, textur):
+		path = textur.tex.getImage().getFilename()
+		if textur.mtNor: #Map To Nor
+			if verboseLogging:
+				print("adding normal map %s" %textur.tex.getName())
+			if textur.mtNor == -1:
+				print("WARNING: normalmap %s cannot be inverted by the exporter" %textur.tex.getName())
+			i3dTex = self.doc.createElement("Normalmap")
+			if textur.norfac > 0:
+				i3dTex.setAttribute("bumpDepth", "%f" %textur.norfac) #Can't test this properly until proper transparent normal maps can be created
+			i3dTex.setAttribute("name", "%s" %self.addFile(path))
+			#print(textur.norfac)
+		elif textur.mtCsp: #Map To Spec
+			if verboseLogging:
+				print("adding specular map %s" %textur.tex.getName())
+			if textur.mtSpec == -1:
+				print("WARNING: specularmap %s cannot be inverted by the exporter" %textur.tex.getName())
+			i3dTex = self.doc.createElement("Glossmap")
+			i3dTex.setAttribute("name", "%s" %self.addFile(path))
+		elif textur.mtEmit: #Map To Emit
+			if verboseLogging:
+				print("adding emissive map %s" %textur.tex.getName())
+			if textur.mtEmit == -1:
+				print("WARNING: emissivemap %s cannot be inverted by the exporter" %textur.tex.getName())
+			i3dTex = self.doc.createElement("Emissivemap")
+			i3dTex.setAttribute("name", "%s" %self.addFile(path))
+		elif textur.mtCol: #Map To Col
+			if verboseLogging:
+				print("adding image texture %s" %textur.tex.getName())
+			i3dTex = self.doc.createElement("Texture")
+			i3dTex.setAttribute("name", "%s" %self.addFile(path))
+		#TODO: other maps
+		return i3dTex
+
+	#Parse material ScriptLink file and merge xml into i3d (if it ends with .i3d)
+	def addMatScriptLink(self, mat, m):
+		for sl in mat.getScriptLinks("FrameChanged") + mat.getScriptLinks("Render") + mat.getScriptLinks("Redraw") + mat.getScriptLinks("ObjectUpdate") + mat.getScriptLinks("ObDataUpdate"):
+			if sl.endswith(".i3d"):
 				if verboseLogging:
-					print("WARNING: no materials assigned -> added pink default material")
-			return self.defaultMat, false
-		
+					print("parsing material script link %s" %sl)
+				xmlText = ""
+				for l in Text.Get(sl).asLines():
+					xmlText = xmlText + l
+				slDom = None
+				try:
+					slDom = parseString(xmlText)
+				except:
+					print "WARNING: cant parse material script link %s" %sl
+					slDom = None
+				if not slDom is None:
+					for n in slDom.getElementsByTagName("Material"):
+						i = 0
+						while i < n.attributes.length: #Copy attributes
+							attr = n.attributes.item(i)
+							if attr.nodeValue.startswith(folderName+"/"):
+								m.setAttribute(attr.nodeName, "%i" %self.addFile(attr.nodeValue))
+							else:
+								m.setAttribute(attr.nodeName, attr.nodeValue)
+							i = i+1
+						for cn in n.childNodes: #Copy child elements
+							if cn.nodeType == cn.ELEMENT_NODE:
+								#print cn
+								if not cn.attributes is None:
+									i = 0
+									while i < cn.attributes.length:
+										attr = cn.attributes.item(i)
+										if attr.nodeValue.startswith(folderName+"/"):
+											attr.nodeValue = "%i" %self.addFile(attr.nodeValue) #Nesting hell O-o
+										i = i+1
+								m.appendChild(cn)
+
+	def addMaterial(self, mat):
+		if mat is None and not self.defaultMat: #Create a nice pink default materials
+			m = self.doc.createElement("Material")
+			m.setAttribute("name", "Default")
+			m.setAttribute("diffuseColor", "%f %f %f %f" %(1, 0, 1, 1))
+			self.materials.appendChild(m)
+			self.defaultMat = true
+			print("WARNING: no materials assigned -> added pink default material")
+			return
+
+		duplicateMaterial = false
 		for m in self.materials.getElementsByTagName("Material"):
 			if m.getAttribute("name") == mat.getName():
 				#print(m.getAttribute("name"))
 				duplicateMaterial = true
+
 		if not duplicateMaterial:
 			if verboseLogging:
 				print("adding material %s" %mat.name)
@@ -509,108 +602,36 @@ class I3d:
 			if mat.getAmb() > 0:
 				m.setAttribute("ambientColor", "%f %f %f" %(mat.getAmb(), mat.getAmb(), mat.getAmb())) #mat.getRGBCol()[0]*mat.amb
 
-			texturN = 0
-			texturCount = 0
+			texturNum = 0
 			for textur in mat.getTextures():
 				texturEnabled = 0
 				for t in mat.enabledTextures:
-					if t == texturN:
-						texturEnabled = 1
+					if t == texturNum:
+						texturEnabled = true
 						break
 				if texturEnabled and exportUVMaps:
 					if textur.tex.getImage() is None or textur.tex.getImage().getFilename() is None:
 						print("WARNING: cannot export texture named %s, it's not an image!" %textur.tex.getName())
 					else:
-						path = textur.tex.getImage().getFilename()
-						j, name = os.path.split(path)
-						del j #We don't like this variable
-						if textur.mtCol:#Map To Col
-							if verboseLogging:
-								print("adding image texture %s" %name)
-							i3dTex = self.doc.createElement("Texture")
-							i3dTex.setAttribute("name", "%s" %self.addFile(path))
-							m.appendChild(i3dTex)
-						if textur.mtNor:#Map To Nor
-							if verboseLogging:
-								print("adding normal map %s" %name)
-							if textur.mtNor == -1:
-								print("WARNING: normalmap %s cannot be inverted by the exporter" %textur.tex.getName())
-							i3dTex = self.doc.createElement("Normalmap")
-							i3dTex.setAttribute("name", "%s" %self.addFile(path))
-							if textur.norfac > 0:
-								i3dTex.setAttribute("bumpDepth", "%f" %textur.norfac) #Can't test this properly until proper transparent normal maps can be created
-							#print(textur.norfac)
-							m.appendChild(i3dTex)
-						if textur.mtCsp:#Map To Spec
-							if verboseLogging:
-								print("adding specular map %s" %name)
-							if textur.mtSpec == -1:
-								print("WARNING: specularmap %s cannot be inverted by the exporter" %textur.tex.getName())
-							i3dTex = self.doc.createElement("Glossmap")
-							i3dTex.setAttribute("name", "%s" %self.addFile(path))
-							m.appendChild(i3dTex)
-						if textur.mtEmit:#Map To Emit
-							if verboseLogging:
-								print("adding emissive map %s" %name)
-							if textur.mtEmit == -1:
-								print("WARNING: emissivemap %s cannot be inverted by the exporter" %textur.tex.getName())
-							i3dTex = self.doc.createElement("Emissivemap")
-							i3dTex.setAttribute("name", "%s" %self.addFile(path))
-							m.appendChild(i3dTex)
-						#self.texturCount = self.texturCount + 1
-						#TODO: other maps
-				texturN = texturN + 1
+						m.appendChild(self.addImageMaps(textur))
+				texturNum = texturNum + 1
 		
-		#Parse material ScriptLink file and merge xml into i3d (if it ends with .i3d)
-		for sl in mat.getScriptLinks("FrameChanged") + mat.getScriptLinks("Render") + mat.getScriptLinks("Redraw") + mat.getScriptLinks("ObjectUpdate") + mat.getScriptLinks("ObDataUpdate"):
-			if sl.endswith(".i3d"):
-				if verboseLogging:
-					print("parsing material script link %s" %sl)
-				xmlText = ""
-				for l in Text.Get(sl).asLines():
-					xmlText = xmlText + l
-				slDom = None
-				try:
-					slDom = parseString(xmlText)
-				except:
-					print "WARNING: cant parse material script link %s" %sl
-					slDom = None
-				if not slDom is None:
-					for n in slDom.getElementsByTagName("Material"):						
-						i = 0
-						while i < n.attributes.length:#Copy attributes
-							attr = n.attributes.item(i)
-							if attr.nodeValue.startswith(folderName+"/"):
-								m.setAttribute(attr.nodeName, "%i" %self.addFile(attr.nodeValue))
-							else:
-								m.setAttribute(attr.nodeName, attr.nodeValue)
-							i = i+1
-						for cn in n.childNodes:#Copy child elements
-							if cn.nodeType == cn.ELEMENT_NODE:
-								#print cn							
-								if not cn.attributes is None:
-									i = 0
-									while i < cn.attributes.length:
-										attr = cn.attributes.item(i)
-										if attr.nodeValue.startswith(folderName+"/"):
-											attr.nodeValue = "%i" %self.addFile(attr.nodeValue)
-										i = i+1
-								m.appendChild(cn)
-		
+			self.addMatScriptLink(mat, m)
 		self.materials.appendChild(m)
 
 	def copyAssets(self, assetPath):
 		j, assetName = os.path.split(assetPath)
-		del j #Pure hatrred GRRRR!!!
+		del j #We don't like this variable
 		head, path = os.path.split(exportPath.val)
 		path = os.path.join(head, folderName)
 		if not os.path.isdir(path) and folderName is not None:
 			os.mkdir(path)
 			if verboseLogging:
 				print("created texure folder at %s" %path)
-		if verboseLogging:
-			print("copying asset %s to: %s" %(assetName, path))
-		shutil.copy(assetPath, path)
+		if not assetPath == os.path.join(path, assetName):
+			shutil.copy(assetPath, path)
+			if verboseLogging:
+				print("copying asset %s to: %s" %(assetName, path))
 
 	def addFile(self, path):
 		newFileId = 1
@@ -659,14 +680,11 @@ class I3d:
 #get a list of vertexGroups and asociated weights this vertex belongs to
 def getVGroup(vertIndex, mesh):
 	groupWeight = []
-	#print "getVGroup in %s"%mesh.name
 	for group in mesh.getVertGroupNames():
-		#print("group %s" %group)
 		singleElement = mesh.getVertsFromGroup(group, 1, [vertIndex])
 		if len(singleElement) == 1:
 			groupWeight.append({0:group, 1:singleElement[0][1]})
 		elif len(singleElement) == 0:
-			#print "nul?"
 			pass
 		else:
 			print "SCARRY!"
@@ -677,7 +695,7 @@ def getVGroup(vertIndex, mesh):
 def calculateWeights(calculate):
 	calculated = []
 	weightCount = len(calculate)
-	if weightCount  > 1:
+	if weightCount > 1:
 		weightSum = sum(calculate)
 		if weightSum < 1:
 			increment = (1-weightSum)/weightCount
@@ -718,7 +736,7 @@ evtVerboseLogging = 17
 
 #Toggle button states
 exportModifiers = true
-exportSkinWeights = true
+exportSkinWeights = false
 exportVertexColors = true
 exportUVMaps = true
 exportSelection = false
@@ -770,8 +788,8 @@ def gui():
 	
 	guiAddObjExtension = Draw.PushButton("Add obj script link", evtAddObjExtension, 10, 250, 150, 25, "Add a text file for more i3d object properties and link it to the active object via script links")
 	guiAddMatExtension = Draw.PushButton("Add mat script link", evtAddMatExtension, 175, 250, 155, 25, "Add a text file for more i3d material properties and link it to the active material via script links")
-	guiExportModifiers = Draw.Toggle("Apply modifiers", evtExportModifiers, 10, 215, 100, 25, exportModifiers, "Apply modifiers to exported objects")
-	guiExportSkinWeights = Draw.Toggle("Skin weights", evtExportSkinWeights, 120, 215, 100, 25, exportSkinWeights, "Export skin weights for armature")
+	guiExportModifiers = Draw.Toggle("Apply modifiers", evtExportModifiers, 10, 215, 100, 25, exportModifiers, "Apply modifiers to exported objects (disables skin weights option)")
+	guiExportSkinWeights = Draw.Toggle("Skin weights", evtExportSkinWeights, 120, 215, 100, 25, exportSkinWeights, "Export skin weights for armature (disables modifiers option)")
 	guiExportVertexColors = Draw.Toggle("Vertex colors", evtExportVertexColors, 230, 215, 100, 25, exportVertexColors, "Export vertex colors")
 	guiExportUVMaps = Draw.Toggle("UV maps", evtExportUVMaps, 10, 180, 100, 25, exportUVMaps, "Export UV textue maps")
 	guiExportTriangulated = Draw.Toggle("Triangulate", evtExportTriangulated, 120, 180, 100, 25, exportTriangulated, "Convert quads to triangles")
@@ -807,7 +825,7 @@ def event(evt, val):  # Function that handles keyboard and mouse events
 	if evt in [Draw.LEFTMOUSE, Draw.MIDDLEMOUSE, Draw.RIGHTMOUSE] and val:
 		showHelp = Draw.PupMenu("Show Help?%t|Ok%x1")
 		if showHelp == 1:
-			ShowHelp("i3dExporter.py")
+			ShowHelp("blenderI3DExport15C.py")
 
 def buttonEvt(evt):
 	global evtExport, evtNameChanged, evtBrows, evtExportSelection, evtDoNothing, exportModifiers, exportSkinWeights, exportVertexColors, exportUVMaps, exportTriangulated, exportNormals, exportSelection, verboseLogging, exportProjectPath, relative, folderName
@@ -836,9 +854,13 @@ def buttonEvt(evt):
 		Draw.Redraw(1)
 	if evt == evtExportModifiers:
 		exportModifiers = 1 - exportModifiers
+		if exportSkinWeights:
+			exportSkinWeights = false
 		Draw.Redraw(1)
 	if evt == evtExportSkinWeights:
 		exportSkinWeights = 1 - exportSkinWeights
+		if exportModifiers:
+			exportModifiers = false
 		Draw.Redraw(1)
 	if evt == evtExportVertexColors:
 		exportVertexColors = 1 - exportVertexColors

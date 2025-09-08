@@ -44,7 +44,10 @@ Change log
  - Added NURBS curve support (used for path creation)
  - Added materials per object support
  - Added armature support
+ - Fixed and updated help page
+ - Fixed file copy error
  - Optimized mesh creation
+ - Refactored code to be more readable
 
 0.3.2 (14.8.2025)
 ----------------------
