@@ -56,12 +56,16 @@ Note!<br>
 from Blender import Scene, Mesh, Window, sys, Mathutils, Draw, Image, BGL, Get, Material, Text, Texture, Get, ShowHelp, Object, Curve
 import BPyMessages
 import bpy
-import math
-import os
-import shutil
-from xml.dom.minidom import Document, parseString
-true = 1
-false = 0
+try:
+	import math
+	import os
+	import shutil
+	from xml.dom.minidom import Document, parseString
+except ImportError:
+	print("""
+Python 2.6 is not installed
+install python to be able to use this script
+http://www.python.org/ftp/python/2.6/python-2.6.msi""")
 
 class I3d:
 	def __init__(self, name="untitled"):
@@ -104,7 +108,6 @@ class I3d:
 		self.files = self.doc.createElement("Files")
 		self.root.appendChild(self.files)
 		self.materials = self.doc.createElement("Materials")
-		self.defaultMat = false
 		self.root.appendChild(self.materials)
 		self.shapes = self.doc.createElement("Shapes")
 		self.root.appendChild(self.shapes)
@@ -124,7 +127,7 @@ class I3d:
 	def setTranslation(self, node, pos):
 		node.setAttribute("translation", "%f %f %f" %(pos[0], pos[2], -pos[1]))
 
-	def setRotation(self, node, rot, rotX90, armature=false):
+	def setRotation(self, node, rot, rotX90, armature=False):
 		ro1, ro2, ro3 = rot[0], rot[2], -rot[1]
 		rot[0], rot[1], rot[2] = math.degrees(rot[0]), math.degrees(rot[2]), math.degrees(-rot[1])
 		if armature:
@@ -139,35 +142,6 @@ class I3d:
 		if rotX90:
 			eRot.x = eRot.x-90
 		node.setAttribute("rotation", "%f %f %f" %(eRot.x, eRot.y, eRot.z))
-
-	#Parse ScriptLink file and merge xml into i3d
-	#Most likely broken, untested due to lack in skills :/
-	def addObjScriptLinks(self, obj):
-		for sl in obj.getScriptLinks("FrameChanged") + obj.getScriptLinks("Render") + obj.getScriptLinks("Redraw") + obj.getScriptLinks("ObjectUpdate") + obj.getScriptLinks("ObDataUpdate"):
-			if sl.endswith(".i3d"):
-				if verboseLogging:
-					print("parsing object script link %s" %sl)
-				xmlText = ""
-				#print Text.Get(sl).asLines()
-				for l in Text.Get(sl).asLines():
-					xmlText = xmlText + l.replace("i3dNodeId", "%i" %self.lastNodeId)
-				#print "xml: ",xmlText
-				#slDom = parseString(xmlText)
-				slDom = None
-				try:
-					slDom = parseString(xmlText)
-				except:
-					print("WARNING: cant parse object script link %s" %sl)
-				if not slDom is None:
-					for ua in slDom.getElementsByTagName("UserAttribute"):
-						self.userAttributes.appendChild(ua)
-
-					for st in slDom.getElementsByTagName("SceneType"):
-						i = 0
-						while i < st.attributes.length:
-							attr = st.attributes.item(i)
-							node.setAttribute(attr.nodeName, attr.nodeValue)
-							i = i+1
 	
 	def addObject(self, obj): #Adds a scene node.
 		#print("add object %s" %(obj.getName()))
@@ -186,7 +160,7 @@ class I3d:
 						break
 			if parentNode == self.scene:
 				print("parent not found for object %s" % obj.getName())
-		rotX90 = false
+		rotX90 = False
 
 		if verboseLogging:
 			print("adding object %s with type %s" %(obj.getName(), obj.getType()))
@@ -201,7 +175,7 @@ class I3d:
 
 			#Materials are linked using a colbit
 			#1 for mat per object, 0 for obData
-			materialList = None
+			materialList = [None] #Fixed material export yet again
 			if len(obj.getMaterials()) > 0 and obj.colbits == 1:
 				materialList = obj.getMaterials()
 				if verboseLogging:
@@ -244,13 +218,13 @@ class I3d:
 			node = self.doc.createElement("TransformGroup")
 			self.boneNames = self.addArmature(node, obj.getData(), obj)
 		elif obj.type == "Camera":
-			rotX90 = true
+			rotX90 = True
 			node = self.doc.createElement("Camera")
 			node.setAttribute("fov", "%f" %(obj.getData().lens))
 			node.setAttribute("nearClip", "%f" %(obj.getData().clipStart))
 			node.setAttribute("farClip", "%f" %(obj.getData().clipEnd))
 		elif obj.type == "Lamp":
-			rotX90 = true #Lamps suffer from similar orientation issue as bones do
+			rotX90 = True #Lamps suffer from similar orientation issue as bones do
 			node = self.doc.createElement("Light")
 			lamp = obj.getData()
 			lampType = ["point", "directional", "spot", "ambient"]
@@ -296,9 +270,38 @@ class I3d:
 			self.setTranslation(node, localMat.translationPart())			
 			self.setRotation(node, obj.getEuler("localspace"), rotX90)
 			parentNode.appendChild(node)
-			self.addObjScriptLinks(obj)
+			#self.addObjScriptLinks(obj)
 		else:
 			print("ERROR: cant export %s: %s" %(obj.type, obj.getName()))
+
+	#Parse object ScriptLink file and merge xml into i3d (if it ends with .i3d)
+	#Disabled unti it can be refactored to work with the old format properly
+	"""def addObjScriptLinks(self, obj):
+		for sl in obj.getScriptLinks("FrameChanged") + obj.getScriptLinks("Render") + obj.getScriptLinks("Redraw") + obj.getScriptLinks("ObjectUpdate") + obj.getScriptLinks("ObDataUpdate"):
+			if sl.endswith(".i3d"):
+				if verboseLogging:
+					print("parsing object script link %s" %sl)
+				xmlText = ""
+				#print Text.Get(sl).asLines()
+				for l in Text.Get(sl).asLines():
+					xmlText = xmlText + l.replace("i3dNodeId", "%i" %self.lastNodeId)
+				#print "xml: ",xmlText
+				#slDom = parseString(xmlText)
+				slDom = None
+				try:
+					slDom = parseString(xmlText)
+				except:
+					print("WARNING: cant parse object script link %s" %sl)
+				if not slDom is None:
+					for ua in slDom.getElementsByTagName("UserAttribute"):
+						self.userAttributes.appendChild(ua)
+
+					for st in slDom.getElementsByTagName("SceneType"):
+						i = 0
+						while i < st.attributes.length:
+							attr = st.attributes.item(i)
+							node.setAttribute(attr.nodeName, attr.nodeValue)
+							i = i+1"""
 
 	def addCurve(self, curve):
 		controlVerts = self.doc.createElement("NurbsCurve")
@@ -335,7 +338,7 @@ class I3d:
 				parentMatrix = Mathutils.Matrix(bone.matrix['ARMATURESPACE'])
 			boneNameIndex.append(bone.name)
 			self.setTranslation(boneNode, parentMatrix.translationPart())
-			self.setRotation(boneNode, parentMatrix.rotationPart().toEuler(), false, true)
+			self.setRotation(boneNode, parentMatrix.rotationPart().toEuler(), False, True)
 			#Make Y point where the Z axis points
 			#Tried rotX90 while swapping Z translation to be the Y, but some things break because of it
 			#Maybe I could do some disgusting hack that uses a rotated temp mesh and skeleton, but that sounds like problems waiting to happen
@@ -344,7 +347,6 @@ class I3d:
 			parent.appendChild(boneNode)
 			for b in bone.children:
 				addBone(self, boneNode, b)
-
 		for bone in arm.bones.values():
 			if bone.hasParent()==0:
 				addBone(self, parentNode, bone)
@@ -356,15 +358,13 @@ class I3d:
 		boneIndices = ""
 		weights = []
 		for vg in vertexGroups:
-			bi = 0
-			for bn in self.boneNames:
+			for bi, bn in enumerate(self.boneNames):
 				if vg[0] == bn and not vg[1] == 0:
 					weights.append(vg[1])
 					if boneIndices == "":
 						boneIndices = "%i" %bi
 					else:
 						boneIndices = "%s %i" %(boneIndices, bi)
-				bi = bi + 1
 		newWeights = calculateWeights(weights)
 		for w in newWeights:
 			if boneWeights == "":
@@ -440,7 +440,7 @@ class I3d:
 			skinWeights = self.doc.createElement("SkinWeights")
 
 		if verboseLogging:
-			print("adding mesh %s with %i vertices" %(mesh.name, len(mesh.verts)))
+			print("adding mesh %s with %i vertices and %i faces" %(mesh.name, len(mesh.verts), len(mesh.faces)))
 
 		for vert in mesh.verts:
 			v = self.doc.createElement("v")
@@ -470,9 +470,7 @@ class I3d:
 					faces.appendChild(self.createTriFace(mesh, vertexOrder, face))
 
 		shaderlist = ""
-		materialCount = 0
-		for mat in materialList:
-			materialCount = materialCount + 1
+		for mi, mat in enumerate(materialList):
 			self.addMaterial(mat)
 			if not mat is None and shaderlist == "":
 				shaderlist = mat.name
@@ -483,9 +481,8 @@ class I3d:
 			#We could have done this a much faster and cleaner way, but the Giants engine just can't handle it when material indices are not in a particular order
 			#DON'T TOUCH THE LOGIC UNLESS YOU WANT TO HAVE HOLES IN YOUR MESH!!!
 			for face in mesh.faces:
-				if face.mat == materialCount-1:
+				if face.mat == mi:
 					defineFace(self, face)
-
 		faces.setAttribute("shaderlist", "%s" %(shaderlist))
 
 		ifs.appendChild(verts)
@@ -493,42 +490,56 @@ class I3d:
 			ifs.appendChild(skinWeights)
 		ifs.appendChild(faces)
 
-	def addImageMaps(self, textur):
-		path = textur.tex.getImage().getFilename()
-		if textur.mtNor: #Map To Nor
-			if verboseLogging:
-				print("adding normal map %s" %textur.tex.getName())
-			if textur.mtNor == -1:
-				print("WARNING: normalmap %s cannot be inverted by the exporter" %textur.tex.getName())
-			i3dTex = self.doc.createElement("Normalmap")
-			if textur.norfac > 0:
-				i3dTex.setAttribute("bumpDepth", "%f" %textur.norfac) #Can't test this properly until proper transparent normal maps can be created
-			i3dTex.setAttribute("name", "%s" %self.addFile(path))
-			#print(textur.norfac)
-		elif textur.mtCsp: #Map To Spec
-			if verboseLogging:
-				print("adding specular map %s" %textur.tex.getName())
-			if textur.mtSpec == -1:
-				print("WARNING: specularmap %s cannot be inverted by the exporter" %textur.tex.getName())
-			i3dTex = self.doc.createElement("Glossmap")
-			i3dTex.setAttribute("name", "%s" %self.addFile(path))
-		elif textur.mtEmit: #Map To Emit
-			if verboseLogging:
-				print("adding emissive map %s" %textur.tex.getName())
-			if textur.mtEmit == -1:
-				print("WARNING: emissivemap %s cannot be inverted by the exporter" %textur.tex.getName())
-			i3dTex = self.doc.createElement("Emissivemap")
-			i3dTex.setAttribute("name", "%s" %self.addFile(path))
-		elif textur.mtCol: #Map To Col
-			if verboseLogging:
-				print("adding image texture %s" %textur.tex.getName())
-			i3dTex = self.doc.createElement("Texture")
-			i3dTex.setAttribute("name", "%s" %self.addFile(path))
-		#TODO: other maps
-		return i3dTex
+	def addMaterial(self, mat):
+		for m in self.materials.getElementsByTagName("Material"): #Check if a material has been added already
+			if not mat is None and m.getAttribute("name") == mat.getName() or m.getAttribute("name") == "Default":
+				return
+
+		if mat is None: #Create a nice pink default materials
+			m = self.doc.createElement("Material")
+			m.setAttribute("name", "Default")
+			m.setAttribute("diffuseColor", "%f %f %f %f" %(1, 0, 1, 1))
+			self.materials.appendChild(m)
+			print("WARNING: no materials assigned -> added pink default material")
+			return
+
+		if verboseLogging:
+			print("adding material %s" %mat.name)
+
+		m = self.doc.createElement("Material")
+		m.setAttribute("name", mat.name)
+
+		if not mat.getEmit() > 0:
+			m.setAttribute("diffuseColor", "%f %f %f %f" %(mat.getRGBCol()[0]*mat.ref, mat.getRGBCol()[1]*mat.ref, mat.getRGBCol()[2]*mat.ref, mat.getAlpha()))
+		if mat.getAlpha() < 1:
+			m.setAttribute("alphaBlending", "true")
+		if mat.getSpec() > 0:
+			m.setAttribute("specularColor", "%f %f %f" %(mat.getSpecCol()[0]*mat.getSpec()/2, mat.getSpecCol()[1]*mat.getSpec()/2, mat.getSpecCol()[2]*mat.getSpec()/2))
+		if mat.getHardness() > 0:
+			m.setAttribute("cosPower", "%i" %mat.getHardness())
+		if mat.getEmit() > 0:
+			m.setAttribute("emissiveColor", "%f %f %f" %(mat.getRGBCol()[0]*mat.getEmit()/2, mat.getRGBCol()[1]*mat.getEmit()/2, mat.getRGBCol()[2]*mat.getEmit()/2))
+		if mat.getMode() & Material.Modes['NOMIST']:
+			m.setAttribute("allowFog", "false")
+		if mat.getAmb() > 0:
+			m.setAttribute("ambientColor", "%f %f %f" %(mat.getAmb(), mat.getAmb(), mat.getAmb())) #mat.getRGBCol()[0]*mat.amb
+
+		for tc, textur in enumerate(mat.getTextures()):
+			texturEnabled = False
+			for t in mat.enabledTextures:
+				if t == tc:
+					texturEnabled = True
+					break
+			if texturEnabled and exportUVMaps:
+				if textur.tex.getImage() is None or textur.tex.getImage().getFilename() is None:
+					print("WARNING: cannot export texture named %s, it's not an image!" %textur.tex.getName())
+				else:
+					m.appendChild(self.addImageMaps(textur))
+		#self.addMatScriptLink(mat, m)
+		self.materials.appendChild(m)
 
 	#Parse material ScriptLink file and merge xml into i3d (if it ends with .i3d)
-	def addMatScriptLink(self, mat, m):
+	"""def addMatScriptLink(self, mat, m):
 		for sl in mat.getScriptLinks("FrameChanged") + mat.getScriptLinks("Render") + mat.getScriptLinks("Redraw") + mat.getScriptLinks("ObjectUpdate") + mat.getScriptLinks("ObDataUpdate"):
 			if sl.endswith(".i3d"):
 				if verboseLogging:
@@ -562,103 +573,72 @@ class I3d:
 										if attr.nodeValue.startswith(folderName+"/"):
 											attr.nodeValue = "%i" %self.addFile(attr.nodeValue) #Nesting hell O-o
 										i = i+1
-								m.appendChild(cn)
+								m.appendChild(cn)"""
 
-	def addMaterial(self, mat):
-		if mat is None and not self.defaultMat: #Create a nice pink default materials
-			m = self.doc.createElement("Material")
-			m.setAttribute("name", "Default")
-			m.setAttribute("diffuseColor", "%f %f %f %f" %(1, 0, 1, 1))
-			self.materials.appendChild(m)
-			self.defaultMat = true
-			print("WARNING: no materials assigned -> added pink default material")
-			return
-
-		duplicateMaterial = false
-		for m in self.materials.getElementsByTagName("Material"):
-			if m.getAttribute("name") == mat.getName():
-				#print(m.getAttribute("name"))
-				duplicateMaterial = true
-
-		if not duplicateMaterial:
+	def addImageMaps(self, textur): #TODO: add wrap option to eliminate white seams for things like sky boxes
+		path = textur.tex.getImage().getFilename()
+		name = textur.tex.getName()
+		if textur.mtNor: #Map To Nor
 			if verboseLogging:
-				print("adding material %s" %mat.name)
-
-			m = self.doc.createElement("Material")
-			m.setAttribute("name", mat.name)
-
-			if not mat.getEmit() > 0:
-				m.setAttribute("diffuseColor", "%f %f %f %f" %(mat.getRGBCol()[0]*mat.ref, mat.getRGBCol()[1]*mat.ref, mat.getRGBCol()[2]*mat.ref, mat.getAlpha()))
-			if mat.getAlpha() < 1:
-				m.setAttribute("alphaBlending", "true")
-			if mat.getSpec() > 0:
-				m.setAttribute("specularColor", "%f %f %f" %(mat.getSpecCol()[0]*mat.getSpec()/2, mat.getSpecCol()[1]*mat.getSpec()/2, mat.getSpecCol()[2]*mat.getSpec()/2))
-			if mat.getHardness() > 0:
-				m.setAttribute("cosPower", "%i" %mat.getHardness())
-			if mat.getEmit() > 0:
-				m.setAttribute("emissiveColor", "%f %f %f" %(mat.getRGBCol()[0]*mat.getEmit()/2, mat.getRGBCol()[1]*mat.getEmit()/2, mat.getRGBCol()[2]*mat.getEmit()/2))
-			if mat.getMode() & Material.Modes['NOMIST']:
-				m.setAttribute("allowFog", "false")
-			if mat.getAmb() > 0:
-				m.setAttribute("ambientColor", "%f %f %f" %(mat.getAmb(), mat.getAmb(), mat.getAmb())) #mat.getRGBCol()[0]*mat.amb
-
-			texturNum = 0
-			for textur in mat.getTextures():
-				texturEnabled = 0
-				for t in mat.enabledTextures:
-					if t == texturNum:
-						texturEnabled = true
-						break
-				if texturEnabled and exportUVMaps:
-					if textur.tex.getImage() is None or textur.tex.getImage().getFilename() is None:
-						print("WARNING: cannot export texture named %s, it's not an image!" %textur.tex.getName())
-					else:
-						m.appendChild(self.addImageMaps(textur))
-				texturNum = texturNum + 1
-		
-			self.addMatScriptLink(mat, m)
-		self.materials.appendChild(m)
+				print("adding normal map %s" %name)
+			if textur.mtNor == -1:
+				print("WARNING: normalmap %s cannot be inverted by the exporter" %name)
+			i3dTex = self.doc.createElement("Normalmap")
+			if textur.norfac > 0:
+				i3dTex.setAttribute("bumpDepth", "%f" %textur.norfac) #Can't test this properly until proper transparent normal maps can be created
+			i3dTex.setAttribute("name", "%s" %self.addFile(path, name))
+			#print(textur.norfac)
+		elif textur.mtCsp: #Map To Spec
+			if verboseLogging:
+				print("adding specular map %s" %name)
+			if textur.mtSpec == -1:
+				print("WARNING: specularmap %s cannot be inverted by the exporter" %name)
+			i3dTex = self.doc.createElement("Glossmap")
+			i3dTex.setAttribute("name", "%s" %self.addFile(path, name))
+		elif textur.mtEmit: #Map To Emit
+			if verboseLogging:
+				print("adding emissive map %s" %name)
+			if textur.mtEmit == -1:
+				print("WARNING: emissivemap %s cannot be inverted by the exporter" %name)
+			i3dTex = self.doc.createElement("Emissivemap")
+			i3dTex.setAttribute("name", "%s" %self.addFile(path, name))
+		elif textur.mtCol: #Map To Col
+			if verboseLogging:
+				print("adding image texture %s" %name)
+			i3dTex = self.doc.createElement("Texture")
+			i3dTex.setAttribute("name", "%s" %self.addFile(path, name))
+		#TODO: other maps
+		return i3dTex
 
 	def copyAssets(self, assetPath):
-		j, assetName = os.path.split(assetPath)
-		del j #We don't like this variable
-		head, path = os.path.split(exportPath.val)
-		path = os.path.join(head, folderName)
-		if not os.path.isdir(path) and folderName is not None:
+		assetName = sys.basename(assetPath)
+		path = sys.join(sys.dirname(exportPath.val), folderName)
+		if not sys.exists(path) and folderName is not None:
 			os.mkdir(path)
 			if verboseLogging:
 				print("created texure folder at %s" %path)
-		if not assetPath == os.path.join(path, assetName):
+		#Checking if the source is the same as the destination, instead of using exists() to be able to copy updated textures
+		if not assetPath == sys.join(path, assetName):
 			shutil.copy(assetPath, path)
 			if verboseLogging:
 				print("copying asset %s to: %s" %(assetName, path))
 
-	def addFile(self, path):
-		newFileId = 1
+	def addFile(self, path, texName):
 		for f in self.files.childNodes:
 			if f.getAttribute("filename") == path:
 				#print("file %s is already added, its id is %s" %(path, f.getAttribute("name")))
 				return f.getAttribute("name")
-			stringName = f.getAttribute("name")
-			stringName = stringName.replace("file", "")
-			#print(stringName)
-			fileId = int(stringName) #This int->string juggling is unnecessary, but we are using the original naming shceme for lulz
-			if fileId >= newFileId:
-				newFileId = fileId + 1
 		f = self.doc.createElement("File")
 		if relative:
 			absolutePath = path
-			path, tail = os.path.split(path)
-			path = os.path.join(folderName, tail)
-			if verboseLogging:
-				print("adding file path %s" %path)
+			path = os.path.join(folderName, sys.basename(path)) #os.path handles empty folder names better here
 			f.setAttribute("relativePath", "true")
 			self.copyAssets(absolutePath)
 		else:
-			if verboseLogging:
-				print("adding file path %s" %path)
 			f.setAttribute("relativePath", "false")
-		f.setAttribute("name", "file%i" %newFileId)
+		if verboseLogging:
+			print("adding file path %s" %path)
+		f.setAttribute("name", "%s" %texName)
 		f.setAttribute("filename", path)
 		self.files.appendChild(f)
 		return f.getAttribute("name")
@@ -735,16 +715,16 @@ evtExportUVMaps = 16
 evtVerboseLogging = 17
 
 #Toggle button states
-exportModifiers = true
-exportSkinWeights = false
-exportVertexColors = true
-exportUVMaps = true
-exportSelection = false
-exportNormals = true
-exportTriangulated = true
-exportProjectPath = false
-verboseLogging = false
-relative = true
+exportModifiers = True
+exportSkinWeights = False
+exportVertexColors = True
+exportUVMaps = True
+exportSelection = False
+exportNormals = True
+exportTriangulated = True
+exportProjectPath = False
+verboseLogging = False
+relative = True
 
 #Global button return values to avoid memory leaks
 guiExport = 0
@@ -774,11 +754,11 @@ exportPath = Draw.Create(Get("filename")[0:Get("filename").rfind(".")]+".i3d")
 #mouseX = 0
 #mouseY = 0
 
-logo = false
+logo = False
 try:
 	logo = Image.Load(Get("scriptsdir")+"/Giants.png")
 except:
-	logo = false
+	logo = False
 	
 
 def gui():
@@ -786,8 +766,8 @@ def gui():
 	global exportPath, texturePath, folderName
 	global guiExport, guiBrows, guiRelativePath, guiExportModifiers, guiExportSkinWeights, guiExportVertexColors, guiExportUVMaps, guiExportTriangulated, guiExportNormals, guiExportSelection, guiVeboseLogging, guiAddObjExtension, guiAddMatExtension, guiLogo
 	
-	guiAddObjExtension = Draw.PushButton("Add obj script link", evtAddObjExtension, 10, 250, 150, 25, "Add a text file for more i3d object properties and link it to the active object via script links")
-	guiAddMatExtension = Draw.PushButton("Add mat script link", evtAddMatExtension, 175, 250, 155, 25, "Add a text file for more i3d material properties and link it to the active material via script links")
+	guiAddObjExtension = Draw.PushButton("Add obj script link", evtDoNothing, 10, 250, 150, 25, "Add a text file for more i3d object properties and link it to the active object via script links (unusable currently)")
+	guiAddMatExtension = Draw.PushButton("Add mat script link", evtDoNothing, 175, 250, 155, 25, "Add a text file for more i3d material properties and link it to the active material via script links (unusable currently)")
 	guiExportModifiers = Draw.Toggle("Apply modifiers", evtExportModifiers, 10, 215, 100, 25, exportModifiers, "Apply modifiers to exported objects (disables skin weights option)")
 	guiExportSkinWeights = Draw.Toggle("Skin weights", evtExportSkinWeights, 120, 215, 100, 25, exportSkinWeights, "Export skin weights for armature (disables modifiers option)")
 	guiExportVertexColors = Draw.Toggle("Vertex colors", evtExportVertexColors, 230, 215, 100, 25, exportVertexColors, "Export vertex colors")
@@ -850,38 +830,38 @@ def buttonEvt(evt):
 	if evt == evtBrows:
 		Window.FileSelector(selectExportFile, "Ok", exportPath.val)
 	if evt == evtExportProjectPath:
-		exportProjectPath = 1 - exportProjectPath
+		exportProjectPath = not exportProjectPath
 		Draw.Redraw(1)
 	if evt == evtExportModifiers:
-		exportModifiers = 1 - exportModifiers
+		exportModifiers = not exportModifiers
 		if exportSkinWeights:
-			exportSkinWeights = false
+			exportSkinWeights = False
 		Draw.Redraw(1)
 	if evt == evtExportSkinWeights:
-		exportSkinWeights = 1 - exportSkinWeights
+		exportSkinWeights = not exportSkinWeights
 		if exportModifiers:
-			exportModifiers = false
+			exportModifiers = False
 		Draw.Redraw(1)
 	if evt == evtExportVertexColors:
-		exportVertexColors = 1 - exportVertexColors
+		exportVertexColors = not exportVertexColors
 		Draw.Redraw(1)
 	if evt == evtExportUVMaps:
-		exportUVMaps = 1 - exportUVMaps
+		exportUVMaps = not exportUVMaps
 		Draw.Redraw(1)
 	if evt == evtExportTriangulated:
-		exportTriangulated = 1 - exportTriangulated
+		exportTriangulated = not exportTriangulated
 		Draw.Redraw(1)
 	if evt == evtExportNormals:
-		exportNormals = 1 - exportNormals
+		exportNormals = not exportNormals
 		Draw.Redraw(1)
 	if evt == evtExportSelection:
-		exportSelection = 1 - exportSelection
+		exportSelection = not exportSelection
 		Draw.Redraw(1)
 	if evt == evtRelativePath:
-		relative = 1 - relative
+		relative = not relative
 		Draw.Redraw(1)
 	if evt == evtVerboseLogging:
-		verboseLogging = 1 - verboseLogging
+		verboseLogging = not verboseLogging
 		Draw.Redraw(1)
 	if evt == evtAddObjExtension:
 		activeObj = bpy.data.scenes.active.objects.active
