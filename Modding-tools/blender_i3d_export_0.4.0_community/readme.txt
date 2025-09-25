@@ -29,8 +29,9 @@ You'll find a hidden directory called ".blender" in your home directory. Inside 
 called "scripts", place the file blenderI3DExport15C.py and Giants.png there. Restart Blender.
 
 Note!
-This woks only with old distro versions (Python 2.6 is not supported and the executable won't launch on new distro versions).
-Use a virtual machine or the Windows version in Wine or run it in a container.
+For Linux users, it is recommended to run the Windows version in Wine to get working file paths for Windows games. I recommend using the portable version.
+After changes in mesh writing to be more like the original, you should pay more attention to texture size. The current version might not handle large textures
+on smaller srufaces as well as the previous arrangement. See "Non-Power-of-Two textures": https://370network.github.io/reGIANTS-docs/gdn.giants.ch/documentation.html#artwork_guide_texturing
 
 Known issues
 ------------
@@ -39,15 +40,17 @@ Known issues
 Change log
 ----------
 
-0.4.0 (26.8.2025)
+0.4.0 (25.9.2025)
 ----------------------
  - Added NURBS curve support (used for path creation)
  - Added materials per object support
  - Added armature support
  - Fixed and updated help page
  - Fixed file copy error
+ - Fixed vertex colors
  - Optimized mesh creation
- - Refactored code to be more readable
+ - Disabled script links until they can be refactored
+ - Refactored code to be more clean and readable
 
 0.3.2 (14.8.2025)
 ----------------------
