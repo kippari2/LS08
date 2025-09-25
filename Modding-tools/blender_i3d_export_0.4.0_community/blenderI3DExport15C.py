@@ -53,7 +53,7 @@ Note!<br>
 -Mat script and obj script links are not functional yet. I haven't figured out how they work.
 """
 
-from Blender import Scene, Mesh, Window, sys, Mathutils, Draw, Image, BGL, Get, Material, Text, Texture, Get, ShowHelp, Object, Curve
+from Blender import Scene, Mesh, Window, sys, Mathutils, Draw, Image, BGL, Get, Set, Material, Text, Texture, Get, ShowHelp, Object, Curve
 import BPyMessages
 import bpy
 try:
@@ -114,7 +114,6 @@ class I3d:
 		self.scene = self.doc.createElement("Scene")
 		self.root.appendChild(self.scene)
 		self.lastNodeId = 0 #Needed until obj script links gets reworked
-		#self.texturCount = 0
 		self.animation = self.doc.createElement("Animation")
 		self.animationSets = self.doc.createElement("AnimationSets")
 		self.animation.appendChild(self.animationSets)
@@ -167,20 +166,20 @@ class I3d:
 		
 		if obj.type == "Mesh":
 			me = obj.getData(mesh=1)
-			if exportModifiers and len(obj.modifiers) > 0: #Unfortunately, it seems like it is not possible to exclude armature form getting applied
+			if exportModifiers and obj.modifiers: #Unfortunately, it seems like it is not possible to exclude armature form getting applied
 				me = bpy.data.meshes.new()
 				me.getFromObject(obj)
 				self.meshesToClear.append(me)
 			node = self.doc.createElement("Shape")
 
 			#Materials are linked using a colbit
-			#1 for mat per object, 0 for obData
-			materialList = [None] #Fixed material export yet again
-			if len(obj.getMaterials()) > 0 and obj.colbits == 1:
+			#1 for mat per object, 0 for obData (mesh)
+			materialList = [None]
+			if obj.getMaterials() and obj.colbits == 1:
 				materialList = obj.getMaterials()
 				if verboseLogging:
 					print("materials for object %s are linked to object" %obj.getName())
-			elif len(me.materials) > 0 and obj.colbits == 0:
+			elif me.materials and obj.colbits == 0:
 				materialList = me.materials
 				if verboseLogging:
 					print("materials for object %s are linked to mesh" %obj.getName())
@@ -216,6 +215,7 @@ class I3d:
 			node = self.doc.createElement("TransformGroup")
 		elif obj.type == "Armature":
 			node = self.doc.createElement("TransformGroup")
+			Set('curframe', 1) #Animations are not suppoerted yet, but we reset the pose before writing mesh and armature data
 			self.boneNames = self.addArmature(node, obj.getData(), obj)
 		elif obj.type == "Camera":
 			rotX90 = True
@@ -307,10 +307,7 @@ class I3d:
 		controlVerts = self.doc.createElement("NurbsCurve")
 		controlVerts.setAttribute("name", "%s" %curve.name)
 		controlVerts.setAttribute("degree", "%s" %curve.getResolu())
-		if curve.isCyclic():
-			form = "close" #There is a third form called "periodic" that will be supported later
-		else:
-			form = "open"
+		form = "close" if curve.isCyclic() else "open"  #There is a third form called "periodic" that will be supported later
 		controlVerts.setAttribute("form", "%s" %form)
 		#Giants Engine will read multiple curves within an object as one continuous curve
 		#Use separate curve objects if you want more than one curve
@@ -359,7 +356,7 @@ class I3d:
 		weights = []
 		for vg in vertexGroups:
 			for bi, bn in enumerate(self.boneNames):
-				if vg[0] == bn and not vg[1] == 0:
+				if vg[0] == bn and not vg[1] == 0: #If the bone weight is 0, it is ignored
 					weights.append(vg[1])
 					if boneIndices == "":
 						boneIndices = "%i" %bi
@@ -376,55 +373,37 @@ class I3d:
 		cv.setAttribute("bi", boneIndices)
 		return cv
 
-	def createTriFace(self, mesh, vertexOrder, face):
+	def createTriFace(self, mesh, vOrder, face):
 		tri = self.doc.createElement("f")
-		tri.setAttribute("vi", "%i %i %i" %(face.v[vertexOrder[0]].index, face.v[vertexOrder[1]].index, face.v[vertexOrder[2]].index))
+		tri.setAttribute("vi", "%i %i %i" %(face.v[vOrder[0]].index, face.v[vOrder[1]].index, face.v[vOrder[2]].index))
 		if exportVertexColors and mesh.vertexColors:
-			realColorR = []
-			realColorG = []
-			realColorB = []
-			for vertCol in face.col:
-				for i in range(3):
-					realColorR.append(vertCol.r/255.0) #Not sure if vertex colors are supposed to look so washed
-					realColorG.append(vertCol.g/255.0)
-					realColorB.append(vertCol.b/255.0)
-					#print("vertex %i %f %f %f" %(i, realColorR[i], realColorG[i], realColorB[i]))
-			tri.setAttribute("c", "%f %f %f %f %f %f %f %f %f" %(realColorR[0], realColorG[0], realColorB[0], realColorR[1], realColorG[1], realColorB[1], realColorR[2], realColorG[2], realColorB[2]))
+			realColorR = [vc.r/255.0 for vc in face.col] #Not sure if vertex colors are supposed to look so washed when light hits the mesh
+			realColorG = [vc.g/255.0 for vc in face.col]
+			realColorB = [vc.b/255.0 for vc in face.col]
+			tri.setAttribute("c", "%f %f %f %f %f %f %f %f %f" %(realColorR[vOrder[0]], realColorG[vOrder[0]], realColorB[vOrder[0]], realColorR[vOrder[1]], realColorG[vOrder[1]], realColorB[vOrder[1]], realColorR[vOrder[2]], realColorG[vOrder[2]], realColorB[vOrder[2]]))
 		if evtExportUVMaps and mesh.faceUV:
-			#Attempetd multi-UV support, but it only loads one texture (yes the other one was transparent and coords correct)
-			#How does it even work????? There are no examples!!!
-			#for i in range(self.texturCount):
-				#tri.setAttribute("t%i" % i, "%f %f %f %f %f %f" % (face.uv[0].x, face.uv[0].y, face.uv[1].x, face.uv[1].y, face.uv[2].x, face.uv[2].y))
-			tri.setAttribute("t0", "%f %f %f %f %f %f" %(face.uv[vertexOrder[0]].x, face.uv[vertexOrder[0]].y, face.uv[vertexOrder[1]].x, face.uv[vertexOrder[1]].y, face.uv[vertexOrder[2]].x, face.uv[vertexOrder[2]].y))
+			tri.setAttribute("t0", "%f %f %f %f %f %f" %(face.uv[vOrder[0]].x, face.uv[vOrder[0]].y, face.uv[vOrder[1]].x, face.uv[vOrder[1]].y, face.uv[vOrder[2]].x, face.uv[vOrder[2]].y))
 		if exportNormals:
 			if face.smooth:
-				tri.setAttribute("n", "%f %f %f %f %f %f %f %f %f" %(face.v[vertexOrder[0]].no.x, face.v[vertexOrder[0]].no.z, -face.v[vertexOrder[0]].no.y, face.v[vertexOrder[1]].no.x, face.v[vertexOrder[1]].no.z, -face.v[vertexOrder[1]].no.y, face.v[vertexOrder[2]].no.x, face.v[vertexOrder[2]].no.z, -face.v[vertexOrder[2]].no.y))
+				tri.setAttribute("n", "%f %f %f %f %f %f %f %f %f" %(face.v[vOrder[0]].no.x, face.v[vOrder[0]].no.z, -face.v[vOrder[0]].no.y, face.v[vOrder[1]].no.x, face.v[vOrder[1]].no.z, -face.v[vOrder[1]].no.y, face.v[vOrder[2]].no.x, face.v[vOrder[2]].no.z, -face.v[vOrder[2]].no.y))
 			else:
 				tri.setAttribute("n", "%f %f %f %f %f %f %f %f %f" %(face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y))
 		tri.setAttribute("ci", "%i" %(face.mat if face.mat is not None else 0))
 		return tri
 
-	def createQuadFace(self, mesh, vertexOrder, face):
+	def createQuadFace(self, mesh, vOrder, face):
 		quad = self.doc.createElement("f")
-		quad.setAttribute("vi", "%i %i %i %i" %(face.v[vertexOrder[0]].index, face.v[vertexOrder[1]].index, face.v[vertexOrder[2]].index, face.v[vertexOrder[3]].index))
+		quad.setAttribute("vi", "%i %i %i %i" %(face.v[vOrder[0]].index, face.v[vOrder[1]].index, face.v[vOrder[2]].index, face.v[vOrder[3]].index))
 		if exportVertexColors and mesh.vertexColors:
-			realColorR = []
-			realColorG = []
-			realColorB = []
-			for vertCol in face.col:
-				for i in range(4):
-					realColorR.append(vertCol.r/255.0)
-					realColorG.append(vertCol.g/255.0)
-					realColorB.append(vertCol.b/255.0)
-					#print("vertex %i %f %f %f" %(i, realColorR[i], realColorG[i], realColorB[i]))
-			quad.setAttribute("c", "%f %f %f %f %f %f %f %f %f %f %f %f" %(realColorR[0], realColorG[0], realColorB[0], realColorR[1], realColorG[1], realColorB[1], realColorR[2], realColorG[2], realColorB[2], realColorR[3], realColorG[3], realColorB[3]))
+			realColorR = [vc.r/255.0 for vc in face.col]
+			realColorG = [vc.g/255.0 for vc in face.col]
+			realColorB = [vc.b/255.0 for vc in face.col]
+			quad.setAttribute("c", "%f %f %f %f %f %f %f %f %f %f %f %f" %(realColorR[vOrder[0]], realColorG[vOrder[0]], realColorB[vOrder[0]], realColorR[vOrder[1]], realColorG[vOrder[1]], realColorB[vOrder[1]], realColorR[vOrder[2]], realColorG[vOrder[2]], realColorB[vOrder[2]], realColorR[vOrder[3]], realColorG[vOrder[3]], realColorB[vOrder[3]]))
 		if evtExportUVMaps and mesh.faceUV:
-			#for i in range(self.texturCount):
-				#quad.setAttribute("t%i" % i, "%f %f %f %f %f %f" % (face.uv[0].x, face.uv[0].y, face.uv[1].x, face.uv[1].y, face.uv[2].x, face.uv[2].y))
-			quad.setAttribute("t0", "%f %f %f %f %f %f %f %f" %(face.uv[vertexOrder[0]].x, face.uv[vertexOrder[0]].y, face.uv[vertexOrder[1]].x, face.uv[vertexOrder[1]].y, face.uv[vertexOrder[2]].x, face.uv[vertexOrder[2]].y, face.uv[vertexOrder[3]].x, face.uv[vertexOrder[3]].y))
+			quad.setAttribute("t0", "%f %f %f %f %f %f %f %f" %(face.uv[vOrder[0]].x, face.uv[vOrder[0]].y, face.uv[vOrder[1]].x, face.uv[vOrder[1]].y, face.uv[vOrder[2]].x, face.uv[vOrder[2]].y, face.uv[vOrder[3]].x, face.uv[vOrder[3]].y))
 		if exportNormals:
 			if face.smooth:
-				quad.setAttribute("n", "%f %f %f %f %f %f %f %f %f %f %f %f" %(face.v[vertexOrder[0]].no.x, face.v[vertexOrder[0]].no.z, -face.v[vertexOrder[0]].no.y, face.v[vertexOrder[1]].no.x, face.v[vertexOrder[1]].no.z, -face.v[vertexOrder[1]].no.y, face.v[vertexOrder[2]].no.x, face.v[vertexOrder[2]].no.z, -face.v[vertexOrder[2]].no.y, face.v[vertexOrder[3]].no.x, face.v[vertexOrder[3]].no.z, -face.v[vertexOrder[3]].no.y))
+				quad.setAttribute("n", "%f %f %f %f %f %f %f %f %f %f %f %f" %(face.v[vOrder[0]].no.x, face.v[vOrder[0]].no.z, -face.v[vOrder[0]].no.y, face.v[vOrder[1]].no.x, face.v[vOrder[1]].no.z, -face.v[vOrder[1]].no.y, face.v[vOrder[2]].no.x, face.v[vOrder[2]].no.z, -face.v[vOrder[2]].no.y, face.v[vOrder[3]].no.x, face.v[vOrder[3]].no.z, -face.v[vOrder[3]].no.y))
 			else:
 				quad.setAttribute("n", "%f %f %f %f %f %f %f %f %f %f %f %f" %(face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y))
 		quad.setAttribute("ci", "%i" %(face.mat if face.mat is not None else 0))
