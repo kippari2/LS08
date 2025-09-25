@@ -113,7 +113,6 @@ class I3d:
 		self.root.appendChild(self.shapes)
 		self.scene = self.doc.createElement("Scene")
 		self.root.appendChild(self.scene)
-		self.lastNodeId = 0 #Needed until obj script links gets reworked
 		self.animation = self.doc.createElement("Animation")
 		self.animationSets = self.doc.createElement("AnimationSets")
 		self.animation.appendChild(self.animationSets)
