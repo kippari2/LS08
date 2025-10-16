@@ -115,7 +115,7 @@ class I3d:
 		self.scene = self.doc.createElement("Scene")
 		self.root.appendChild(self.scene)
 		self.animation = self.doc.createElement("Animation")
-		self.characterSets = self.doc.createElement("AnimationSets")
+		self.characterSets = self.doc.createElement("CharacterSets")
 		self.animation.appendChild(self.characterSets)
 		self.root.appendChild(self.animation)
 		self.userAttributes = self.doc.createElement("UserAttributes")
@@ -305,9 +305,7 @@ class I3d:
 							i = i+1"""
 
 	def addObjectAnimation(self, obj):
-		#objectIpo = obj.getIpo()
-		#print(objectIpo)
-		action = obj.getAction()
+		action = obj.getAction() #Using both actions and Ipo (inculde Ipo in action)
 		if action is not None:
 			#print(action)
 			characterSet = self.doc.createElement("CharacterSet")
@@ -325,15 +323,25 @@ class I3d:
 			clip.setAttribute("duration", "%f" %duration)
 			keyframes = self.doc.createElement("Keyframes")
 			keyframes.setAttribute("node", "%s" %obj.getName())
-			"""for key in action.getFrameNumbers():
+			print(objectIpo[Ipo.OB_LOCX].interpolation)
+			IpoRotCurve = objectIpo[Ipo.OB_ROTX] or objectIpo[Ipo.OB_ROTY] or objectIpo[Ipo.OB_ROTZ]
+			IpoTransCurve = objectIpo[Ipo.OB_LOCX] or objectIpo[Ipo.OB_LOCY] or objectIpo[Ipo.OB_LOCZ]
+			for key in action.getFrameNumbers():
 				keyframe = self.doc.createElement("Keyframe")
 				keyframe.setAttribute("time", "%f" %key)
-				print(key, objectIpo.curveConsts)
-				#Set('curframe', key)
-				#self.setRotation(keyframe, obj.getEuler("localspace"), False)
-				localMat = Mathutils.Matrix(obj.matrixLocal)
-				#self.setTranslation(keyframe, localMat.translationPart())
-				keyframes.appendChild(keyframe)"""
+				Set('curframe', key)
+				if IpoRotCurve:
+					self.setRotation(keyframe, obj.getEuler("localspace"), False)
+					if IpoRotCurve and IpoRotCurve.interpolation == 1:
+						keyframe.setAttribute("iprin", "linear")
+						keyframe.setAttribute("iprout", "linear")
+				if IpoTransCurve:
+					localMat = Mathutils.Matrix(obj.matrixLocal)
+					self.setTranslation(keyframe, localMat.translationPart())
+					if IpoTransCurve and IpoTransCurve.interpolation == 1:
+						keyframe.setAttribute("iptin", "linear")
+						keyframe.setAttribute("iptout", "linear")
+				keyframes.appendChild(keyframe)
 			Set('curframe', 1)
 			clip.appendChild(keyframes)
 			characterSet.appendChild(clip)
