@@ -32,17 +32,21 @@ Note!
 For Linux users, it is recommended to run the Windows version in Wine to get working file paths for Windows games. I recommend using the portable version.
 After changes in mesh writing to be more like the original, you should pay more attention to texture size. The current version might not handle large textures
 on smaller srufaces as well as the previous arrangement. See "Non-Power-of-Two textures": https://370network.github.io/reGIANTS-docs/gdn.giants.ch/documentation.html#artwork_guide_texturing
+Object scaling is supported now, but regardless of it you should apply scale before exporitng objects (select & ctrl+a) to avoid translation and rotation issues.
 
 Known issues
 ------------
- - Exporting an i3d made by this exporter to .obj will fragment the mesh into individual triangles
+ - Lamps, armature/bones and cameras are oriented incorrelty after export (for armature this is not critical)
 
 Change log
 ----------
 
-0.4.1 (15.10.2025)
+0.4.1 (20.11.2025)
 ----------------------
- - Added object animation support
+ - Added object & armature animation support
+ - Added object scaling support
+ - Fixed material export bug when default material is added
+ - Updated help page
 
 0.4.0 (25.9.2025)
 ----------------------

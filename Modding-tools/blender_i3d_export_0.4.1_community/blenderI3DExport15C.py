@@ -46,6 +46,9 @@ Usage:<br>
 -Open file menu in blender.<br>
 -Choose Export -> GIANTS Engine 0.2.5 - 4.0.0 (.i3d)...
 
+Known issues:<br>
+-Lamps, armature/bones and cameras are oriented incorrelty after export (for armature this is not critical).
+
 Note!<br>
 -Skin weights and modifiers options can't be used at the same time! This is due to the inability to exclude the armature modifier without actually deforming the mesh and causing headaches for you.<br>
 -If your object turns out pink you probably forgot to assign a material.<br>
@@ -122,9 +125,13 @@ class I3d:
 		self.root.appendChild(self.userAttributes)
 		self.meshesToClear = []
 		self.boneNames = None
+		self.originalAnimFrame = Get('curframe')
 	
 	def setTranslation(self, node, pos):
 		node.setAttribute("translation", "%f %f %f" %(pos[0], pos[2], -pos[1]))
+
+	def setScale(self, node, scale):
+		node.setAttribute("scale", "%f %f %f" %(scale[0], scale[2], scale[1]))
 
 	def setRotation(self, node, rot, rotX90, armature=False):
 		ro1, ro2, ro3 = rot[0], rot[2], -rot[1]
@@ -163,6 +170,8 @@ class I3d:
 
 		if verboseLogging:
 			print("adding object %s with type %s" %(obj.getName(), obj.getType()))
+
+		Set('curframe', 1)
 		
 		if obj.type == "Mesh":
 			me = obj.getData(mesh=1)
@@ -215,8 +224,9 @@ class I3d:
 			node = self.doc.createElement("TransformGroup")
 		elif obj.type == "Armature":
 			node = self.doc.createElement("TransformGroup")
-			Set('curframe', 1) #Animations are not suppoerted yet, but we reset the pose before writing mesh and armature data
 			self.boneNames = self.addArmature(node, obj.getData(), obj)
+			if self.boneNames:
+				self.addArmatureAnimation(obj)
 		elif obj.type == "Camera":
 			rotX90 = True
 			node = self.doc.createElement("Camera")
@@ -224,7 +234,7 @@ class I3d:
 			node.setAttribute("nearClip", "%f" %(obj.getData().clipStart))
 			node.setAttribute("farClip", "%f" %(obj.getData().clipEnd))
 		elif obj.type == "Lamp":
-			rotX90 = True #Lamps suffer from similar orientation issue as bones do
+			rotX90 = True
 			node = self.doc.createElement("Light")
 			lamp = obj.getData()
 			lampType = ["point", "directional", "spot", "ambient"]
@@ -269,8 +279,10 @@ class I3d:
 			localMat = Mathutils.Matrix(obj.matrixLocal)
 			self.setTranslation(node, localMat.translationPart())			
 			self.setRotation(node, obj.getEuler("localspace"), rotX90)
+			self.setScale(node, localMat.scalePart())
 			parentNode.appendChild(node)
-			self.addObjectAnimation(obj)
+			if obj.type != "Armature":
+				self.addObjectAnimation(obj)
 			#self.addObjScriptLinks(obj)
 		else:
 			print("ERROR: cant export %s: %s" %(obj.type, obj.getName()))
@@ -306,46 +318,111 @@ class I3d:
 
 	def addObjectAnimation(self, obj):
 		action = obj.getAction() #Using both actions and Ipo (inculde Ipo in action)
-		if action is not None:
-			#print(action)
-			characterSet = self.doc.createElement("CharacterSet")
-			characterSet.setAttribute("name", "%s" %obj.getName())
-			clip = self.doc.createElement("Clip")
-			clip.setAttribute("name", "%s" %action.name)
-			channel = action.getChannelNames() #The Ipo link becomes none when it is included in the action editor, getting it from the channel instead
-			channel = str(channel)[2:-2] #This will definitely break if you have another channel in the list (constraints are fine), whenever that happens...
-			print("channel ", channel)
-			objectIpo = action.getChannelIpo(channel)
-			print("ipo", objectIpo.name)
-			#duration = action.getFrameNumbers()
-			duration = Get('endframe')
-			print(action.name, duration) #The Ipo is for testing what actions (loc rot scale) should be written into the animation
-			clip.setAttribute("duration", "%f" %duration)
+		if action is None:
+			return
+
+		characterSet = self.doc.createElement("CharacterSet")
+		characterSet.setAttribute("name", "%sAnimation" %obj.getName())
+		clip = self.doc.createElement("Clip")
+		clip.setAttribute("name", "%s" %action.name)
+		print("channel ", channel)
+		channel = action.getChannelNames() #The Ipo link becomes none when it is included in the action editor, getting it from the channel instead
+		channel = str(channel)[2:-2] #This breaks with armature
+		objectIpo = action.getChannelIpo(channel) #The Ipo is for testing what actions (loc rot scale) should be written into the animation
+		print("ipo", objectIpo.name)
+		duration = action.getFrameNumbers()
+		#duration = Get('endframe')
+		scene = Scene.GetCurrent()
+		context = scene.getRenderingContext()
+		print(action.name, duration)
+		keyframes = self.doc.createElement("Keyframes")
+		keyframes.setAttribute("node", "%s" %obj.getName())
+		#print(objectIpo[Ipo.OB_LOCX].interpolation)
+		IpoRotCurve = objectIpo[Ipo.OB_ROTX] or objectIpo[Ipo.OB_ROTY] or objectIpo[Ipo.OB_ROTZ]
+		IpoTransCurve = objectIpo[Ipo.OB_LOCX] or objectIpo[Ipo.OB_LOCY] or objectIpo[Ipo.OB_LOCZ]
+		IpoScaleCurve = objectIpo[Ipo.OB_SCALEX] or objectIpo[Ipo.OB_SCALEY] or objectIpo[Ipo.OB_SCALEZ]
+		for key in duration:
+			keyframe = self.doc.createElement("Keyframe") #Unfortunately, visibility can't be keyed in this Blender version (exporter for newer will have that)
+			keyframe.setAttribute("time", "%f" %(int(key-1)*1000/context.fps))
+			Set('curframe', key)
+			localMat = Mathutils.Matrix(obj.matrixLocal)
+			if IpoRotCurve:
+				self.setRotation(keyframe, obj.getEuler("localspace"), False)
+				if IpoRotCurve.interpolation == 1:
+					keyframe.setAttribute("iprin", "linear") #Blender can't have different interpolations at the start or end
+					keyframe.setAttribute("iprout", "linear")
+			if IpoTransCurve:
+				self.setTranslation(keyframe, localMat.translationPart())
+				if IpoTransCurve.interpolation == 1:
+					keyframe.setAttribute("iptin", "linear")
+					keyframe.setAttribute("iptout", "linear")
+			if IpoScaleCurve:
+				self.setScale(keyframe, localMat.scalePart())
+				if IpoScaleCurve.interpolation == 1:
+					keyframe.setAttribute("ipsin", "linear")
+					keyframe.setAttribute("ipsout", "linear")
+			keyframes.appendChild(keyframe)
+		clip.setAttribute("duration", "%f" %((duration.pop()-1)*1000/context.fps))
+		Set('curframe', self.originalAnimFrame)
+		clip.appendChild(keyframes)
+		characterSet.appendChild(clip)
+		self.characterSets.appendChild(characterSet)
+
+	def addArmatureAnimation(self, obj):
+		action = obj.getAction()
+		if action is None:
+			return
+
+		characterSet = self.doc.createElement("CharacterSet")
+		characterSet.setAttribute("name", "%sAnimation" %obj.getName())
+		clip = self.doc.createElement("Clip")
+		clip.setAttribute("name", "%s" %action.name)
+		duration = action.getFrameNumbers()
+		scene = Scene.GetCurrent()
+		context = scene.getRenderingContext()
+		print(action.name, duration)
+		channels = action.getChannelNames()
+		print(channels)
+		for boneName in channels: #TODO: Make error handling for object channels
+			print(boneName)
 			keyframes = self.doc.createElement("Keyframes")
-			keyframes.setAttribute("node", "%s" %obj.getName())
-			print(objectIpo[Ipo.OB_LOCX].interpolation)
-			IpoRotCurve = objectIpo[Ipo.OB_ROTX] or objectIpo[Ipo.OB_ROTY] or objectIpo[Ipo.OB_ROTZ]
-			IpoTransCurve = objectIpo[Ipo.OB_LOCX] or objectIpo[Ipo.OB_LOCY] or objectIpo[Ipo.OB_LOCZ]
-			for key in action.getFrameNumbers():
+			keyframes.setAttribute("node", "%s" %boneName)
+			boneIpo = action.getChannelIpo(boneName)
+			print("ipo", boneIpo.name)
+			IpoRotCurve = boneIpo[Ipo.PO_QUATX] or boneIpo[Ipo.PO_QUATY] or boneIpo[Ipo.PO_QUATZ]
+			IpoTransCurve = boneIpo[Ipo.PO_LOCX] or boneIpo[Ipo.PO_LOCY] or boneIpo[Ipo.PO_LOCZ]
+			IpoScaleCurve = boneIpo[Ipo.PO_SCALEX] or boneIpo[Ipo.PO_SCALEY] or boneIpo[Ipo.PO_SCALEZ]
+			for key in duration: #Going through keyframes per bone
 				keyframe = self.doc.createElement("Keyframe")
-				keyframe.setAttribute("time", "%f" %key)
+				keyframe.setAttribute("time", "%f" %(int(key-1)*1000/context.fps))
 				Set('curframe', key)
+				pose = obj.getPose()
+				bone = pose.bones[boneName]
+				poseBoneMat = Mathutils.Matrix(pose.bones[boneName].poseMatrix)
+				if bone.parent: #Calculating parentspace-matrix for parent bones
+					parentPoseMat = Mathutils.Matrix(pose.bones[bone.parent.name].poseMatrix)
+					poseBoneMat = poseBoneMat*parentPoseMat.invert()
 				if IpoRotCurve:
-					self.setRotation(keyframe, obj.getEuler("localspace"), False)
-					if IpoRotCurve and IpoRotCurve.interpolation == 1:
+					self.setRotation(keyframe, poseBoneMat.rotationPart().toEuler(), False, True)
+					if IpoRotCurve.interpolation == 1:
 						keyframe.setAttribute("iprin", "linear")
 						keyframe.setAttribute("iprout", "linear")
 				if IpoTransCurve:
-					localMat = Mathutils.Matrix(obj.matrixLocal)
-					self.setTranslation(keyframe, localMat.translationPart())
-					if IpoTransCurve and IpoTransCurve.interpolation == 1:
+					self.setTranslation(keyframe, poseBoneMat.translationPart())
+					if IpoTransCurve.interpolation == 1:
 						keyframe.setAttribute("iptin", "linear")
 						keyframe.setAttribute("iptout", "linear")
+				if IpoScaleCurve:
+					self.setScale(keyframe, poseBoneMat.scalePart())
+					if IpoScaleCurve.interpolation == 1:
+						keyframe.setAttribute("ipsin", "linear")
+						keyframe.setAttribute("ipsout", "linear")
 				keyframes.appendChild(keyframe)
-			Set('curframe', 1)
 			clip.appendChild(keyframes)
-			characterSet.appendChild(clip)
-			self.characterSets.appendChild(characterSet)
+		clip.setAttribute("duration", "%f" %((duration.pop()-1)*1000/context.fps))
+		Set('curframe', self.originalAnimFrame)
+		characterSet.appendChild(clip)
+		self.characterSets.appendChild(characterSet)
 
 	def addCurve(self, curve):
 		controlVerts = self.doc.createElement("NurbsCurve")
@@ -400,7 +477,7 @@ class I3d:
 		weights = []
 		for vg in vertexGroups:
 			for bi, bn in enumerate(self.boneNames):
-				if vg[0] == bn and not vg[1] == 0: #If the bone weight is 0, it is ignored
+				if vg[0] == bn and vg[1] != 0: #If the bone weight is 0, it is ignored
 					weights.append(vg[1])
 					if boneIndices == "":
 						boneIndices = "%i" %bi
@@ -515,10 +592,10 @@ class I3d:
 
 	def addMaterial(self, mat):
 		for m in self.materials.getElementsByTagName("Material"): #Check if a material has been added already
-			if not mat is None and m.getAttribute("name") == mat.getName() or m.getAttribute("name") == "Default":
+			if not mat is None and m.getAttribute("name") == mat.getName() or mat is None and m.getAttribute("name") == "Default":
 				return
 
-		if mat is None: #Create a nice pink default materials
+		if mat is None: #Create a nice pink default material
 			m = self.doc.createElement("Material")
 			m.setAttribute("name", "Default")
 			m.setAttribute("diffuseColor", "%f %f %f %f" %(1, 0, 1, 1))
@@ -693,7 +770,7 @@ def getVGroup(vertIndex, mesh):
 			print "SCARRY!"
 	return groupWeight
 
-#Blender does not adhere to the rule where all weights add up to 1 and we have to recalculate them
+#Blender does not adhere to the rule where all weights add up to 1 and we have to normalize them
 #Weight to weight ratios have to be kept the same
 def calculateWeights(calculate):
 	calculated = []
