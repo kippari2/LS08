@@ -33,6 +33,7 @@ For Linux users, it is recommended to run the Windows version in Wine to get wor
 After changes in mesh writing to be more like the original, you should pay more attention to texture size. The current version might not handle large textures
 on smaller srufaces as well as the previous arrangement. See "Non-Power-of-Two textures": https://370network.github.io/reGIANTS-docs/gdn.giants.ch/documentation.html#artwork_guide_texturing
 Object scaling is supported now, but regardless of it you should apply scale before exporitng objects (select & ctrl+a) to avoid translation and rotation issues.
+Script link features are disabled until they can be rewritten to work with i3d 1.5.
 
 Known issues
 ------------

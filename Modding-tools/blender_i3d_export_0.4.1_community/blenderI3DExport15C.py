@@ -171,7 +171,7 @@ class I3d:
 		if verboseLogging:
 			print("adding object %s with type %s" %(obj.getName(), obj.getType()))
 
-		Set('curframe', 1)
+		Set('curframe', 1) #set everything to resting position before writing mesh and armature data
 		
 		if obj.type == "Mesh":
 			me = obj.getData(mesh=1)
@@ -225,8 +225,6 @@ class I3d:
 		elif obj.type == "Armature":
 			node = self.doc.createElement("TransformGroup")
 			self.boneNames = self.addArmature(node, obj.getData(), obj)
-			if self.boneNames:
-				self.addArmatureAnimation(obj)
 		elif obj.type == "Camera":
 			rotX90 = True
 			node = self.doc.createElement("Camera")
@@ -253,16 +251,19 @@ class I3d:
 				node.setAttribute("emitSpecular", "false")
 			else:
 				node.setAttribute("emitSpecular", "true")
+				node.setAttribute("specularColor", "%f %f %f" %(lamp.r, lamp.g, lamp.b))
 			node.setAttribute("decayRate", "%f" %(5000-lamp.getDist()))
 			node.setAttribute("range", "%f" %lamp.getDist())
 			if lamp.getMode() & lamp.Modes['Shadows']:
 				node.setAttribute("castShadowMap", "true")
 			else:
 				node.setAttribute("castShadowMap", "false")
+			node.setAttribute("diffuseColor", "%f %f %f" %(lamp.r, lamp.g, lamp.b))
 			node.setAttribute("depthMapBias", "%f" %(lamp.bias/1000))
 			node.setAttribute("depthMapResolution", "%i" %lamp.bufferSize)
 			node.setAttribute("coneAngle", "%f" %(lamp.getSpotSize()))
 			node.setAttribute("dropOff", "%f" %(lamp.getSpotBlend()*5))
+			#TODO: Figure out how projTexture works and implement it
 		elif obj.type == "Curve":
 			curve = obj.getData()
 			if curve.isNurb():
@@ -281,8 +282,7 @@ class I3d:
 			self.setRotation(node, obj.getEuler("localspace"), rotX90)
 			self.setScale(node, localMat.scalePart())
 			parentNode.appendChild(node)
-			if obj.type != "Armature":
-				self.addObjectAnimation(obj)
+			self.addAnimation(obj)
 			#self.addObjScriptLinks(obj)
 		else:
 			print("ERROR: cant export %s: %s" %(obj.type, obj.getName()))
@@ -316,113 +316,81 @@ class I3d:
 							node.setAttribute(attr.nodeName, attr.nodeValue)
 							i = i+1"""
 
-	def addObjectAnimation(self, obj):
+	def addAnimation(self, obj):
 		action = obj.getAction() #Using both actions and Ipo (inculde Ipo in action)
 		if action is None:
 			return
 
 		characterSet = self.doc.createElement("CharacterSet")
-		characterSet.setAttribute("name", "%sAnimation" %obj.getName())
+		characterSetName = "%sAnimation" %obj.getName()
+		characterSet.setAttribute("name", "%s" %characterSetName)
 		clip = self.doc.createElement("Clip")
 		clip.setAttribute("name", "%s" %action.name)
-		print("channel ", channel)
-		channel = action.getChannelNames() #The Ipo link becomes none when it is included in the action editor, getting it from the channel instead
-		channel = str(channel)[2:-2] #This breaks with armature
-		objectIpo = action.getChannelIpo(channel) #The Ipo is for testing what actions (loc rot scale) should be written into the animation
-		print("ipo", objectIpo.name)
-		duration = action.getFrameNumbers()
-		#duration = Get('endframe')
 		scene = Scene.GetCurrent()
 		context = scene.getRenderingContext()
-		print(action.name, duration)
-		keyframes = self.doc.createElement("Keyframes")
-		keyframes.setAttribute("node", "%s" %obj.getName())
-		#print(objectIpo[Ipo.OB_LOCX].interpolation)
-		IpoRotCurve = objectIpo[Ipo.OB_ROTX] or objectIpo[Ipo.OB_ROTY] or objectIpo[Ipo.OB_ROTZ]
-		IpoTransCurve = objectIpo[Ipo.OB_LOCX] or objectIpo[Ipo.OB_LOCY] or objectIpo[Ipo.OB_LOCZ]
-		IpoScaleCurve = objectIpo[Ipo.OB_SCALEX] or objectIpo[Ipo.OB_SCALEY] or objectIpo[Ipo.OB_SCALEZ]
-		for key in duration:
-			keyframe = self.doc.createElement("Keyframe") #Unfortunately, visibility can't be keyed in this Blender version (exporter for newer will have that)
-			keyframe.setAttribute("time", "%f" %(int(key-1)*1000/context.fps))
-			Set('curframe', key)
-			localMat = Mathutils.Matrix(obj.matrixLocal)
-			if IpoRotCurve:
-				self.setRotation(keyframe, obj.getEuler("localspace"), False)
-				if IpoRotCurve.interpolation == 1:
-					keyframe.setAttribute("iprin", "linear") #Blender can't have different interpolations at the start or end
-					keyframe.setAttribute("iprout", "linear")
-			if IpoTransCurve:
-				self.setTranslation(keyframe, localMat.translationPart())
-				if IpoTransCurve.interpolation == 1:
-					keyframe.setAttribute("iptin", "linear")
-					keyframe.setAttribute("iptout", "linear")
-			if IpoScaleCurve:
-				self.setScale(keyframe, localMat.scalePart())
-				if IpoScaleCurve.interpolation == 1:
-					keyframe.setAttribute("ipsin", "linear")
-					keyframe.setAttribute("ipsout", "linear")
-			keyframes.appendChild(keyframe)
-		clip.setAttribute("duration", "%f" %((duration.pop()-1)*1000/context.fps))
-		Set('curframe', self.originalAnimFrame)
-		clip.appendChild(keyframes)
-		characterSet.appendChild(clip)
-		self.characterSets.appendChild(characterSet)
+		channels = action.getChannelNames() #The Ipo link becomes none when it is included in the action editor, getting it from the channel instead
+		keyframeTimes = action.getFrameNumbers()
+		duration = list(keyframeTimes)
+		duration = (duration.pop()-1)*1000/context.fps
 
-	def addArmatureAnimation(self, obj):
-		action = obj.getAction()
-		if action is None:
-			return
-
-		characterSet = self.doc.createElement("CharacterSet")
-		characterSet.setAttribute("name", "%sAnimation" %obj.getName())
-		clip = self.doc.createElement("Clip")
-		clip.setAttribute("name", "%s" %action.name)
-		duration = action.getFrameNumbers()
-		scene = Scene.GetCurrent()
-		context = scene.getRenderingContext()
-		print(action.name, duration)
-		channels = action.getChannelNames()
-		print(channels)
-		for boneName in channels: #TODO: Make error handling for object channels
-			print(boneName)
+		if verboseLogging:
+			print("adding character set %s with clip %s duration %f with %i active channels" %(characterSetName, action.name, duration, len(channels)))
+		for animObject in channels:
 			keyframes = self.doc.createElement("Keyframes")
-			keyframes.setAttribute("node", "%s" %boneName)
-			boneIpo = action.getChannelIpo(boneName)
-			print("ipo", boneIpo.name)
-			IpoRotCurve = boneIpo[Ipo.PO_QUATX] or boneIpo[Ipo.PO_QUATY] or boneIpo[Ipo.PO_QUATZ]
-			IpoTransCurve = boneIpo[Ipo.PO_LOCX] or boneIpo[Ipo.PO_LOCY] or boneIpo[Ipo.PO_LOCZ]
-			IpoScaleCurve = boneIpo[Ipo.PO_SCALEX] or boneIpo[Ipo.PO_SCALEY] or boneIpo[Ipo.PO_SCALEZ]
-			for key in duration: #Going through keyframes per bone
-				keyframe = self.doc.createElement("Keyframe")
+			animationNode = obj.getName() if obj.type != "Armature" else animObject #The node shows up as "Object" with objects when using animObject
+			keyframes.setAttribute("node", "%s" %animationNode)
+			objectIpo = action.getChannelIpo(animObject) #The Ipo is for testing what actions (loc rot scale) and interpolation should be written into the animation
+			if objectIpo is None:
+				print("WARNING: Ipo channel for object %s is empty -> skipping" %animObject)
+				return
+			IpoRotCurve = objectIpo[Ipo.PO_QUATX] or objectIpo[Ipo.PO_QUATY] or objectIpo[Ipo.PO_QUATZ] or objectIpo[Ipo.OB_ROTX] or objectIpo[Ipo.OB_ROTY] or objectIpo[Ipo.OB_ROTZ]
+			IpoTransCurve = objectIpo[Ipo.PO_LOCX] or objectIpo[Ipo.PO_LOCY] or objectIpo[Ipo.PO_LOCZ] or objectIpo[Ipo.OB_LOCX] or objectIpo[Ipo.OB_LOCY] or objectIpo[Ipo.OB_LOCZ]
+			IpoScaleCurve = objectIpo[Ipo.PO_SCALEX] or objectIpo[Ipo.PO_SCALEY] or objectIpo[Ipo.PO_SCALEZ] or objectIpo[Ipo.OB_SCALEX] or objectIpo[Ipo.OB_SCALEY] or objectIpo[Ipo.OB_SCALEZ]
+			if verboseLogging:
+				print("adding %i keyframes for object %s (ipo %s)" %(len(keyframeTimes), animationNode, objectIpo.name))
+				activeActions = "%s%s%s" %("rotation " if IpoRotCurve else "", "translation " if IpoTransCurve else "", "scale" if IpoScaleCurve else "")
+				print("active actions: %s" %activeActions)
+			for key in keyframeTimes:
+				keyframe = self.doc.createElement("Keyframe") #Unfortunately, visibility can't be keyed in this Blender version (exporter for newer will have that)
 				keyframe.setAttribute("time", "%f" %(int(key-1)*1000/context.fps))
 				Set('curframe', key)
-				pose = obj.getPose()
-				bone = pose.bones[boneName]
-				poseBoneMat = Mathutils.Matrix(pose.bones[boneName].poseMatrix)
-				if bone.parent: #Calculating parentspace-matrix for parent bones
-					parentPoseMat = Mathutils.Matrix(pose.bones[bone.parent.name].poseMatrix)
-					poseBoneMat = poseBoneMat*parentPoseMat.invert()
+				animationMatrix = self.getAnimationMatrix(obj, animObject)
 				if IpoRotCurve:
-					self.setRotation(keyframe, poseBoneMat.rotationPart().toEuler(), False, True)
+					self.setRotation(keyframe, animationMatrix[0], False, True)
 					if IpoRotCurve.interpolation == 1:
-						keyframe.setAttribute("iprin", "linear")
+						keyframe.setAttribute("iprin", "linear") #Blender can't have different interpolations at the start or end
 						keyframe.setAttribute("iprout", "linear")
 				if IpoTransCurve:
-					self.setTranslation(keyframe, poseBoneMat.translationPart())
+					self.setTranslation(keyframe, animationMatrix[1])
 					if IpoTransCurve.interpolation == 1:
 						keyframe.setAttribute("iptin", "linear")
 						keyframe.setAttribute("iptout", "linear")
 				if IpoScaleCurve:
-					self.setScale(keyframe, poseBoneMat.scalePart())
+					self.setScale(keyframe, animationMatrix[2])
 					if IpoScaleCurve.interpolation == 1:
 						keyframe.setAttribute("ipsin", "linear")
 						keyframe.setAttribute("ipsout", "linear")
 				keyframes.appendChild(keyframe)
 			clip.appendChild(keyframes)
-		clip.setAttribute("duration", "%f" %((duration.pop()-1)*1000/context.fps))
-		Set('curframe', self.originalAnimFrame)
+
+		clip.setAttribute("duration", "%f" %duration)
 		characterSet.appendChild(clip)
 		self.characterSets.appendChild(characterSet)
+
+	def getAnimationMatrix(self, obj, objectName):
+		animationMatrices = []
+		if obj.type == "Armature":
+			pose = obj.getPose()
+			bone = pose.bones[objectName]
+			poseBoneMatrix = Mathutils.Matrix(pose.bones[objectName].poseMatrix)
+			if bone.parent: #Calculating parentspace-matrix for parent bones
+				parentPoseMatrix = Mathutils.Matrix(pose.bones[bone.parent.name].poseMatrix)
+				poseBoneMatrix = poseBoneMatrix*parentPoseMatrix.invert()
+			animationMatrices = [poseBoneMatrix.rotationPart().toEuler(), poseBoneMatrix.translationPart(), poseBoneMatrix.scalePart()]
+		else:
+			objectMatrix = Mathutils.Matrix(obj.matrixLocal)
+			animationMatrices = [obj.getEuler("localspace"), objectMatrix.translationPart(), objectMatrix.scalePart()]
+		return animationMatrices
 
 	def addCurve(self, curve):
 		controlVerts = self.doc.createElement("NurbsCurve")
@@ -523,7 +491,7 @@ class I3d:
 		if evtExportUVMaps and mesh.faceUV:
 			quad.setAttribute("t0", "%f %f %f %f %f %f %f %f" %(face.uv[vOrder[0]].x, face.uv[vOrder[0]].y, face.uv[vOrder[1]].x, face.uv[vOrder[1]].y, face.uv[vOrder[2]].x, face.uv[vOrder[2]].y, face.uv[vOrder[3]].x, face.uv[vOrder[3]].y))
 		if exportNormals:
-			if face.smooth:
+			if face.smooth: #I'm sorry about this lines lenght
 				quad.setAttribute("n", "%f %f %f %f %f %f %f %f %f %f %f %f" %(face.v[vOrder[0]].no.x, face.v[vOrder[0]].no.z, -face.v[vOrder[0]].no.y, face.v[vOrder[1]].no.x, face.v[vOrder[1]].no.z, -face.v[vOrder[1]].no.y, face.v[vOrder[2]].no.x, face.v[vOrder[2]].no.z, -face.v[vOrder[2]].no.y, face.v[vOrder[3]].no.x, face.v[vOrder[3]].no.z, -face.v[vOrder[3]].no.y))
 			else:
 				quad.setAttribute("n", "%f %f %f %f %f %f %f %f %f %f %f %f" %(face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y, face.no.x, face.no.z, -face.no.y))
@@ -754,6 +722,7 @@ class I3d:
 		out.write(self.doc.toprettyxml())
 		out.close()
 		self.clearTempMesh()
+		Set('curframe', self.originalAnimFrame)
 
 #-------END of i3d class------------------------------------------------------------------
 
@@ -864,10 +833,10 @@ except:
 def gui():
 	global evtExport, evtNameChanged, evtBrows, evtPathChangedActive, evtDoNothing
 	global exportPath, texturePath, folderName
-	global guiExport, guiBrows, guiRelativePath, guiExportModifiers, guiExportSkinWeights, guiExportVertexColors, guiExportUVMaps, guiExportTriangulated, guiExportNormals, guiExportSelection, guiVeboseLogging, guiAddObjExtension, guiAddMatExtension, guiLogo
+	global guiExport, guiBrows, guiRelativePath, guiExportModifiers, guiExportSkinWeights, guiExportVertexColors, guiExportUVMaps, guiExportTriangulated, guiExportNormals, guiExportSelection, guiVeboseLogging, guiLogo
 	
-	guiAddObjExtension = Draw.PushButton("Add obj script link", evtDoNothing, 10, 250, 150, 25, "Add a text file for more i3d object properties and link it to the active object via script links (unusable currently)")
-	guiAddMatExtension = Draw.PushButton("Add mat script link", evtDoNothing, 175, 250, 155, 25, "Add a text file for more i3d material properties and link it to the active material via script links (unusable currently)")
+	#guiAddObjExtension = Draw.PushButton("Add obj script link", evtDoNothing, 10, 250, 150, 25, "Add a text file for more i3d object properties and link it to the active object via script links (unusable currently)")
+	#guiAddMatExtension = Draw.PushButton("Add mat script link", evtDoNothing, 175, 250, 155, 25, "Add a text file for more i3d material properties and link it to the active material via script links (unusable currently)")
 	guiExportModifiers = Draw.Toggle("Apply modifiers", evtExportModifiers, 10, 215, 100, 25, exportModifiers, "Apply modifiers to exported objects (disables skin weights option)")
 	guiExportSkinWeights = Draw.Toggle("Skin weights", evtExportSkinWeights, 120, 215, 100, 25, exportSkinWeights, "Export skin weights for armature (disables modifiers option)")
 	guiExportVertexColors = Draw.Toggle("Vertex colors", evtExportVertexColors, 230, 215, 100, 25, exportVertexColors, "Export vertex colors")
@@ -963,7 +932,7 @@ def buttonEvt(evt):
 	if evt == evtVerboseLogging:
 		verboseLogging = not verboseLogging
 		Draw.Redraw(1)
-	if evt == evtAddObjExtension:
+	"""if evt == evtAddObjExtension:
 		activeObj = bpy.data.scenes.active.objects.active
 		slName = "%s.i3d"%activeObj.name
 		sl = None
@@ -975,7 +944,7 @@ def buttonEvt(evt):
 			guiPopup = Draw.PupMenu("%s already exists. Find it in the Text Editor"%slName)
 		else:
 			sl = Text.New(slName)
-			sl.write("""<!--
+			sl.write(<!--
 this describes some i3d properties of the object it is linked to via Script Links.
 the name of this text file must end with ".i3d".
 all attributes of the SceneType node are copied to the Object in the final i3d.
@@ -991,7 +960,7 @@ For the UserAttributes to work the attribute nodeId must be "i3dNodeId".
 			<Attribute name="onCreate" type="scriptCallback" value="print"/>
 		</UserAttribute>
 	</UserAttributes>
-</i3D>""")
+</i3D>)
 			activeObj.addScriptLink(sl.getName(), "FrameChanged")
 			guiPopup = Draw.PupMenu("Check ScriptLink panel and Text Editor for %s"%sl.getName())
 	if evt == evtAddMatExtension:
@@ -1007,7 +976,7 @@ For the UserAttributes to work the attribute nodeId must be "i3dNodeId".
 			guiPopup = Draw.PupMenu("%s already exists. Find it in the Text Editor"%slName)
 		else:
 			sl = Text.New(slName)
-			sl.write("""<!--
+			sl.write(<!--
 this describes some i3d properties of the material it is linked to via Script Links.
 the name of this text file must end with ".i3d".
 all attribute values starting with "assets/" are added to the Files Node and replaced with the id.
@@ -1020,9 +989,10 @@ in order for file references to work the path must start with "assets/".
 			<CustomParameter name="exampleParameter" value="2 0 0 0"/>	
 		</Material>
 	</Materials>
-</i3D>""")
+</i3D>)
 			activeMat.addScriptLink(sl.getName(), "FrameChanged")
 			guiPopup = Draw.PupMenu("Check ScriptLink panel and Text Editor for %s"%sl.getName())
+"""
 		
 
 def selectExportFile(file):
