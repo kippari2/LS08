@@ -39,7 +39,9 @@ Image maps<br>
 -Texture<br>
 -Specular<br>
 -Emissive<br>
--Normal
+-Normal<br>
+Animations<br>
+-Object and armature animations
 
 Usage:<br>
 -Place this script in %appdata%/Blender Foundation/Blender/.blender/scripts directory.<br>
@@ -77,6 +79,8 @@ class I3d:
 			print("LS2009 Mods community i3D 1.5 exporter version 0.4.1")
 			print("enabled export options (1=true, 0=false)")
 			exportOptionsToPrint = {
+				"animation": exportAnimation,
+				"anim time": exportUnmodifiedAnimTime,
 				"modifiers": exportModifiers,
 				"skin weights": exportSkinWeights,
 				"vertex colors": exportVertexColors,
@@ -165,11 +169,11 @@ class I3d:
 						parentNode = sceneNode
 						break
 			if parentNode == self.scene:
-				print("parent not found for object %s" % obj.getName())
+				print("parent not found for object '%s'" % obj.getName())
 		rotX90 = False
 
 		if verboseLogging:
-			print("adding object %s with type %s" %(obj.getName(), obj.getType()))
+			print("adding object '%s' with type '%s'" %(obj.getName(), obj.getType()))
 
 		Set('curframe', 1) #set everything to resting position before writing mesh and armature data
 		
@@ -187,11 +191,11 @@ class I3d:
 			if obj.getMaterials() and obj.colbits == 1:
 				materialList = obj.getMaterials()
 				if verboseLogging:
-					print("materials for object %s are linked to object" %obj.getName())
+					print("materials for '%s' are linked to object" %obj.getName())
 			elif me.materials and obj.colbits == 0:
 				materialList = me.materials
 				if verboseLogging:
-					print("materials for object %s are linked to mesh" %obj.getName())
+					print("materials for '%s' are linked to mesh (obData)" %obj.getName())
 			self.addMesh(me, materialList)
 			node.setAttribute("ref", "%s" %me.name)
 
@@ -204,7 +208,7 @@ class I3d:
 						skinBinds = "%s %s" %(skinBinds, bn)
 				node.setAttribute("skinBindNodes", "%s" %skinBinds)
 				if verboseLogging:
-					print("object %s has skin binds: %s" %(obj.getName(), skinBinds))
+					print("object '%s' has skin binds: %s" %(obj.getName(), skinBinds))
 			
 			#Shading properties are stored per object in Giants: getting them from first Blender material
 			if not materialList is None and materialList[0]:
@@ -238,7 +242,7 @@ class I3d:
 			lampType = ["point", "directional", "spot", "ambient"]
 			if lamp.getType() > 3:
 				node.setAttribute("type", lampType[0])
-				print("WARNING: lamp type not supported")
+				print("WARNING: lamp type '%s' not supported" %lamp.getType())
 			else:
 				node.setAttribute("type", lampType[lamp.getType()])
 			node.setAttribute("diffuseColor", "%f %f %f" %(lamp.R*lamp.energy, lamp.G*lamp.energy, lamp.B*lamp.energy))
@@ -271,7 +275,7 @@ class I3d:
 				self.addCurve(curve)
 				node.setAttribute("ref", "%s" %(curve.name))
 			else:
-				print("ERROR: can't export curve %s with type %s" %(obj.name, curve.getType()))
+				print("ERROR: can't export curve '%s' type '%s'" %(obj.name, curve.getType()))
 
 		if not node is None:
 			node.setAttribute("name", obj.getName())
@@ -282,10 +286,11 @@ class I3d:
 			self.setRotation(node, obj.getEuler("localspace"), rotX90)
 			self.setScale(node, localMat.scalePart())
 			parentNode.appendChild(node)
-			self.addAnimation(obj)
+			if exportAnimation:
+				self.addAnimation(obj)
 			#self.addObjScriptLinks(obj)
 		else:
-			print("ERROR: cant export %s: %s" %(obj.type, obj.getName()))
+			print("ERROR: cant export object '%s' type '%s'" %(obj.getName(), obj.type))
 
 	#Parse object ScriptLink file and merge xml into i3d (if it ends with .i3d)
 	#Disabled unti it can be refactored to work with the old format properly
@@ -331,28 +336,34 @@ class I3d:
 		channels = action.getChannelNames() #The Ipo link becomes none when it is included in the action editor, getting it from the channel instead
 		keyframeTimes = action.getFrameNumbers()
 		duration = list(keyframeTimes)
-		duration = (duration.pop()-1)*1000/context.fps
+		if not exportUnmodifiedAnimTime:
+			duration = (duration.pop()-1)*1000/context.fps
+		else:
+			duration = duration.pop()
 
 		if verboseLogging:
-			print("adding character set %s with clip %s duration %f with %i active channels" %(characterSetName, action.name, duration, len(channels)))
+			print("adding character set '%s' clip '%s' duration: %f active channels: %i" %(characterSetName, action.name, duration, len(channels)))
 		for animObject in channels:
 			keyframes = self.doc.createElement("Keyframes")
 			animationNode = obj.getName() if obj.type != "Armature" else animObject #The node shows up as "Object" with objects when using animObject
 			keyframes.setAttribute("node", "%s" %animationNode)
 			objectIpo = action.getChannelIpo(animObject) #The Ipo is for testing what actions (loc rot scale) and interpolation should be written into the animation
 			if objectIpo is None:
-				print("WARNING: Ipo channel for object %s is empty -> skipping" %animObject)
+				print("WARNING: Ipo channel for '%s' is empty -> skipping" %animObject)
 				return
 			IpoRotCurve = objectIpo[Ipo.PO_QUATX] or objectIpo[Ipo.PO_QUATY] or objectIpo[Ipo.PO_QUATZ] or objectIpo[Ipo.OB_ROTX] or objectIpo[Ipo.OB_ROTY] or objectIpo[Ipo.OB_ROTZ]
 			IpoTransCurve = objectIpo[Ipo.PO_LOCX] or objectIpo[Ipo.PO_LOCY] or objectIpo[Ipo.PO_LOCZ] or objectIpo[Ipo.OB_LOCX] or objectIpo[Ipo.OB_LOCY] or objectIpo[Ipo.OB_LOCZ]
 			IpoScaleCurve = objectIpo[Ipo.PO_SCALEX] or objectIpo[Ipo.PO_SCALEY] or objectIpo[Ipo.PO_SCALEZ] or objectIpo[Ipo.OB_SCALEX] or objectIpo[Ipo.OB_SCALEY] or objectIpo[Ipo.OB_SCALEZ]
 			if verboseLogging:
-				print("adding %i keyframes for object %s (ipo %s)" %(len(keyframeTimes), animationNode, objectIpo.name))
+				print("adding %i keyframes for object '%s' (ipo: %s)" %(len(keyframeTimes), animationNode, objectIpo.name))
 				activeActions = "%s%s%s" %("rotation " if IpoRotCurve else "", "translation " if IpoTransCurve else "", "scale" if IpoScaleCurve else "")
 				print("active actions: %s" %activeActions)
 			for key in keyframeTimes:
 				keyframe = self.doc.createElement("Keyframe") #Unfortunately, visibility can't be keyed in this Blender version (exporter for newer will have that)
-				keyframe.setAttribute("time", "%f" %(int(key-1)*1000/context.fps))
+				time = key
+				if not exportUnmodifiedAnimTime:
+					time = int(key-1)*1000/context.fps
+				keyframe.setAttribute("time", "%f" %time)
 				Set('curframe', key)
 				animationMatrix = self.getAnimationMatrix(obj, animObject)
 				if IpoRotCurve:
@@ -389,7 +400,8 @@ class I3d:
 			animationMatrices = [poseBoneMatrix.rotationPart().toEuler(), poseBoneMatrix.translationPart(), poseBoneMatrix.scalePart()]
 		else:
 			objectMatrix = Mathutils.Matrix(obj.matrixLocal)
-			animationMatrices = [obj.getEuler("localspace"), objectMatrix.translationPart(), objectMatrix.scalePart()]
+			animationMatrices = [objectMatrix.rotationPart().toEuler(), objectMatrix.translationPart(), objectMatrix.scalePart()]
+			#getEuler("localspace") works only when it's used in the setRotation function call, no clue why
 		return animationMatrices
 
 	def addCurve(self, curve):
@@ -401,7 +413,7 @@ class I3d:
 		#Giants Engine will read multiple curves within an object as one continuous curve
 		#Use separate curve objects if you want more than one curve
 		if len(curve) > 1:
-			print("WARNING: no more than 1 curve per object supported in object %s" %curve.name)
+			print("WARNING: no more than 1 curve per object supported in '%s'" %curve.name)
 		for i in range(len(curve[0])):
 			cv = self.doc.createElement("cv")
 			cv.setAttribute("c", "%f %f %f" %(curve[0][i][0], curve[0][i][2], -curve[0][i][1]))
@@ -508,7 +520,7 @@ class I3d:
 			skinWeights = self.doc.createElement("SkinWeights")
 
 		if verboseLogging:
-			print("adding mesh %s with %i vertices and %i faces" %(mesh.name, len(mesh.verts), len(mesh.faces)))
+			print("adding mesh '%s' vertices: %i faces: %i" %(mesh.name, len(mesh.verts), len(mesh.faces)))
 
 		for vert in mesh.verts:
 			v = self.doc.createElement("v")
@@ -572,7 +584,7 @@ class I3d:
 			return
 
 		if verboseLogging:
-			print("adding material %s" %mat.name)
+			print("adding material '%s'" %mat.name)
 
 		m = self.doc.createElement("Material")
 		m.setAttribute("name", mat.name)
@@ -600,7 +612,7 @@ class I3d:
 					break
 			if texturEnabled and exportUVMaps:
 				if textur.tex.getImage() is None or textur.tex.getImage().getFilename() is None:
-					print("WARNING: cannot export texture named %s, it's not an image!" %textur.tex.getName())
+					print("WARNING: texture '%s' is not an image -> skipping" %textur.tex.getName())
 				else:
 					m.appendChild(self.addImageMaps(textur))
 		#self.addMatScriptLink(mat, m)
@@ -648,9 +660,9 @@ class I3d:
 		name = textur.tex.getName()
 		if textur.mtNor: #Map To Nor
 			if verboseLogging:
-				print("adding normal map %s" %name)
+				print("adding normal map '%s'" %name)
 			if textur.mtNor == -1:
-				print("WARNING: normalmap %s cannot be inverted by the exporter" %name)
+				print("WARNING: normalmap '%s' cannot be inverted by the exporter" %name)
 			i3dTex = self.doc.createElement("Normalmap")
 			if textur.norfac > 0:
 				i3dTex.setAttribute("bumpDepth", "%f" %textur.norfac) #Can't test this properly until proper transparent normal maps can be created
@@ -658,21 +670,21 @@ class I3d:
 			#print(textur.norfac)
 		elif textur.mtCsp: #Map To Spec
 			if verboseLogging:
-				print("adding specular map %s" %name)
+				print("adding specular map '%s'" %name)
 			if textur.mtSpec == -1:
-				print("WARNING: specularmap %s cannot be inverted by the exporter" %name)
+				print("WARNING: specularmap '%s' cannot be inverted by the exporter" %name)
 			i3dTex = self.doc.createElement("Glossmap")
 			i3dTex.setAttribute("name", "%s" %self.addFile(path, name))
 		elif textur.mtEmit: #Map To Emit
 			if verboseLogging:
-				print("adding emissive map %s" %name)
+				print("adding emissive map '%s'" %name)
 			if textur.mtEmit == -1:
-				print("WARNING: emissivemap %s cannot be inverted by the exporter" %name)
+				print("WARNING: emissivemap '%s' cannot be inverted by the exporter" %name)
 			i3dTex = self.doc.createElement("Emissivemap")
 			i3dTex.setAttribute("name", "%s" %self.addFile(path, name))
 		elif textur.mtCol: #Map To Col
 			if verboseLogging:
-				print("adding image texture %s" %name)
+				print("adding image texture '%s'" %name)
 			i3dTex = self.doc.createElement("Texture")
 			i3dTex.setAttribute("name", "%s" %self.addFile(path, name))
 		#TODO: other maps
@@ -684,12 +696,12 @@ class I3d:
 		if not sys.exists(path) and folderName is not None:
 			os.mkdir(path)
 			if verboseLogging:
-				print("created texure folder at %s" %path)
+				print("created texure folder at: %s" %path)
 		#Checking if the source is the same as the destination, instead of using exists() to be able to copy updated textures
 		if not assetPath == sys.join(path, assetName):
 			shutil.copy(assetPath, path)
 			if verboseLogging:
-				print("copying asset %s to: %s" %(assetName, path))
+				print("copying asset '%s' to: %s" %(assetName, path))
 
 	def addFile(self, path, texName):
 		for f in self.files.childNodes:
@@ -701,11 +713,12 @@ class I3d:
 			absolutePath = path
 			path = os.path.join(folderName, sys.basename(path)) #os.path handles empty folder names better here
 			f.setAttribute("relativePath", "true")
-			self.copyAssets(absolutePath)
+			if copyFiles:
+				self.copyAssets(absolutePath)
 		else:
 			f.setAttribute("relativePath", "false")
 		if verboseLogging:
-			print("adding file path %s" %path)
+			print("adding file path: %s" %path)
 		f.setAttribute("name", "%s" %texName)
 		f.setAttribute("filename", path)
 		self.files.appendChild(f)
@@ -714,7 +727,7 @@ class I3d:
 	def clearTempMesh(self):
 		for me in self.meshesToClear:
 			if verboseLogging:
-				print("clearing temp mesh %s" %me.getName())
+				print("clearing temp mesh '%s'" %me.name)
 			me.verts = None
 	
 	def printToFile(self, filepath):
@@ -726,7 +739,7 @@ class I3d:
 
 #-------END of i3d class------------------------------------------------------------------
 
-#get a list of vertexGroups and asociated weights this vertex belongs to
+#get a list of vertexGroups and associated weights this vertex belongs to
 def getVGroup(vertIndex, mesh):
 	groupWeight = []
 	for group in mesh.getVertGroupNames():
@@ -771,8 +784,8 @@ evtBrows = 3
 evtExportSelection = 4
 evtExportNormals = 5
 evtExportTriangulated = 6
-evtAddObjExtension = 7
-evtAddMatExtension = 8
+#evtAddObjExtension = 7
+#evtAddMatExtension = 8
 evtExportModifiers = 9
 evtExportProjectPath = 10
 evtRelativePath = 11
@@ -782,8 +795,13 @@ evtExportSkinWeights = 14
 evtExportVertexColors = 15
 evtExportUVMaps = 16
 evtVerboseLogging = 17
+evtCopyFiles = 18
+evtExportAnimation = 19
+evtExportUnmodifiedAnimTime = 20
 
 #Toggle button states
+exportAnimation = True
+exportUnmodifiedAnimTime = False
 exportModifiers = True
 exportSkinWeights = False
 exportVertexColors = True
@@ -794,19 +812,22 @@ exportTriangulated = True
 exportProjectPath = False
 verboseLogging = False
 relative = True
+copyFiles = True
 
 #Global button return values to avoid memory leaks
 guiExport = 0
 guiRelativePath = 0
 guiBrows = 0
+guiExportAnimation = 0
+guiExportUnmodifiedAnimTime = 0
 guiExportModifiers = 0
 guiExportSkinWeights = 0
 guiExportVertexColors = 0
 guiExportUVMaps = 0
 guiExportNormals = 0
 guiExportTriangulated = 0
-guiAddObjExtension = 0
-guiAddMatExtension = 0
+#guiAddObjExtension = 0
+#guiAddMatExtension = 0
 guiExportSelection = 0
 guiExportProjectPath = 0
 guiVeboseLogging = 0
@@ -833,10 +854,12 @@ except:
 def gui():
 	global evtExport, evtNameChanged, evtBrows, evtPathChangedActive, evtDoNothing
 	global exportPath, texturePath, folderName
-	global guiExport, guiBrows, guiRelativePath, guiExportModifiers, guiExportSkinWeights, guiExportVertexColors, guiExportUVMaps, guiExportTriangulated, guiExportNormals, guiExportSelection, guiVeboseLogging, guiLogo
+	global guiExport, guiBrows, guiRelativePath, guiCopyFiles, guiExportAnimation, guiExportUnmodifiedAnimTime, guiExportModifiers, guiExportSkinWeights, guiExportVertexColors, guiExportUVMaps, guiExportTriangulated, guiExportNormals, guiExportSelection, guiVeboseLogging, guiLogo
 	
 	#guiAddObjExtension = Draw.PushButton("Add obj script link", evtDoNothing, 10, 250, 150, 25, "Add a text file for more i3d object properties and link it to the active object via script links (unusable currently)")
 	#guiAddMatExtension = Draw.PushButton("Add mat script link", evtDoNothing, 175, 250, 155, 25, "Add a text file for more i3d material properties and link it to the active material via script links (unusable currently)")
+	guiExportAnimation = Draw.Toggle("Animation", evtExportAnimation, 10, 250, 100, 25, exportAnimation, "Export animations")
+	guiExportUnmodifiedAnimTime = Draw.Toggle("Anim time", evtExportUnmodifiedAnimTime, 120, 250, 100, 25, exportUnmodifiedAnimTime, "Export animations without recalculated animation time (gives you more precise control of the result)")
 	guiExportModifiers = Draw.Toggle("Apply modifiers", evtExportModifiers, 10, 215, 100, 25, exportModifiers, "Apply modifiers to exported objects (disables skin weights option)")
 	guiExportSkinWeights = Draw.Toggle("Skin weights", evtExportSkinWeights, 120, 215, 100, 25, exportSkinWeights, "Export skin weights for armature (disables modifiers option)")
 	guiExportVertexColors = Draw.Toggle("Vertex colors", evtExportVertexColors, 230, 215, 100, 25, exportVertexColors, "Export vertex colors")
@@ -847,8 +870,9 @@ def gui():
 	guiExportProjectPath = Draw.Toggle("Project path", evtExportProjectPath, 120, 145, 100, 25, exportProjectPath, "Export with a path to current blender file")
 	guiVeboseLogging = Draw.Toggle("Verbose", evtVerboseLogging, 230, 145, 100, 25, verboseLogging, "Enable detailed logging for troubleshooting")
 	exportPath = Draw.String("Export to: ", evtDoNothing, 10, 80, 260, 25, exportPath.val, 256,"Export to %s" %exportPath.val)
-	guiBrows = Draw.PushButton("Brows", evtBrows, 280, 80, 50, 25, "Open file browser to choose export location")
-	guiRelativePath = Draw.Toggle("Relative", evtRelativePath, 280, 110, 50, 25, relative, "Enable relative path")
+	guiBrows = Draw.PushButton("Browse", evtBrows, 280, 80, 50, 25, "Open file browser to choose export location")
+	guiRelativePath = Draw.Toggle("R", evtRelativePath, 280, 110, 25, 25, relative, "Enable texture relative path")
+	guiCopyFiles = Draw.Toggle("C", evtCopyFiles, 305, 110, 25, 25, copyFiles, "Enable texture file copying")
 	if relative:
 		texturePath = Draw.String("Texure folder: ", evtNameChanged, 10, 110, 260, 25, folderName, 256, "Folder name to copy assets to (leave blank if you don't want to copy to a folder)")
 	else:
@@ -871,13 +895,13 @@ def event(evt, val):  # Function that handles keyboard and mouse events
 		if stop == 1:
 			Draw.Exit()
 			return
-	if evt in [Draw.LEFTMOUSE, Draw.MIDDLEMOUSE, Draw.RIGHTMOUSE] and val:
+	if evt in [Draw.MIDDLEMOUSE, Draw.RIGHTMOUSE] and val:
 		showHelp = Draw.PupMenu("Show Help?%t|Ok%x1")
 		if showHelp == 1:
 			ShowHelp("blenderI3DExport15C.py")
 
 def buttonEvt(evt):
-	global evtExport, evtNameChanged, evtBrows, evtExportSelection, evtDoNothing, exportModifiers, exportSkinWeights, exportVertexColors, exportUVMaps, exportTriangulated, exportNormals, exportSelection, verboseLogging, exportProjectPath, relative, folderName
+	global evtExport, evtNameChanged, evtBrows, evtExportSelection, evtDoNothing, exportAnimation, exportUnmodifiedAnimTime, exportModifiers, exportSkinWeights, exportVertexColors, exportUVMaps, exportTriangulated, exportNormals, exportSelection, verboseLogging, exportProjectPath, relative, copyFiles, folderName
 	global exportPath, texturePath
 	global guiPopup
 	if evt == evtExport:
@@ -900,6 +924,12 @@ def buttonEvt(evt):
 		Window.FileSelector(selectExportFile, "Ok", exportPath.val)
 	if evt == evtExportProjectPath:
 		exportProjectPath = not exportProjectPath
+		Draw.Redraw(1)
+	if evt == evtExportAnimation:
+		exportAnimation = not exportAnimation
+		Draw.Redraw(1)
+	if evt == evtExportUnmodifiedAnimTime:
+		exportUnmodifiedAnimTime = not exportUnmodifiedAnimTime
 		Draw.Redraw(1)
 	if evt == evtExportModifiers:
 		exportModifiers = not exportModifiers
@@ -928,6 +958,9 @@ def buttonEvt(evt):
 		Draw.Redraw(1)
 	if evt == evtRelativePath:
 		relative = not relative
+		Draw.Redraw(1)
+	if evt == evtCopyFiles:
+		copyFiles = not copyFiles
 		Draw.Redraw(1)
 	if evt == evtVerboseLogging:
 		verboseLogging = not verboseLogging

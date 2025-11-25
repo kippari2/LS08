@@ -44,9 +44,11 @@ Change log
 
 0.4.1 (20.11.2025)
 ----------------------
- - Added object & armature animation support
+ - Added object and armature animation support
  - Added object scaling support
  - Fixed material export bug when default material is added
+ - Fixed verbose logging temp mesh clearing error
+ - Reformatted verbose logging prints
  - Updated help page
 
 0.4.0 (25.9.2025)
