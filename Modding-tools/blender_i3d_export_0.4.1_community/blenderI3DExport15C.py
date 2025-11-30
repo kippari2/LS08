@@ -44,22 +44,20 @@ Animations<br>
 -Object and armature animations
 
 Usage:<br>
--Place this script in %appdata%/Blender Foundation/Blender/.blender/scripts directory.<br>
+-Place this script in Blender/.blender/scripts directory.<br>
 -Open file menu in blender.<br>
 -Choose Export -> GIANTS Engine 0.2.5 - 4.0.0 (.i3d)...
 
 Known issues:<br>
--Lamps, armature/bones and cameras are oriented incorrelty after export (for armature this is not critical).
+-Directional lights, armature/bones and cameras are oriented incorrelty after export (for armature this is not critical).
 
 Note!<br>
--Skin weights and modifiers options can't be used at the same time! This is due to the inability to exclude the armature modifier without actually deforming the mesh and causing headaches for you.<br>
+-Skin weights and modifiers options can't be used at the same time! This is due to the inability to exclude the armature modifier from being applied.<br>
 -If your object turns out pink you probably forgot to assign a material.<br>
 -If its black you probably forgot to UV unwrap it.<br>
--Mat script and obj script links are not functional yet. I haven't figured out how they work.
 """
-
+terminate = False
 from Blender import Scene, Mesh, Window, sys, Mathutils, Draw, Image, BGL, Get, Set, Material, Text, Texture, ShowHelp, Object, Curve, Ipo
-#from Blender.Armature import NLA
 import BPyMessages
 import bpy
 try:
@@ -69,9 +67,16 @@ try:
 	from xml.dom.minidom import Document, parseString
 except ImportError:
 	print("""
-Python 2.5/2.6 is not installed
+critical modules failed to load, python 2.5/2.6 is not detected
 install python to be able to use this script
-http://www.python.org/ftp/python/2.6/python-2.6.msi""")
+https://www.python.org/downloads/release/python-254/ (blender 2.48)
+https://www.python.org/downloads/release/python-266/ (blender 2.49)
+
+if this problem persists, check if your path to python is set correctly in environment variables under 'Path'
+https://coderivers.org/blog/set-path-for-python/ (windows)
+https://gitlab.winehq.org/wine/wine/-/wikis/Wine-User's-Guide (linux wine)""")
+	Draw.PupMenu("Full python installation not detected %t | Check the console for more info")
+	terminate = True
 
 class I3d:
 	def __init__(self, name="untitled"):
@@ -612,7 +617,7 @@ class I3d:
 					break
 			if texturEnabled and exportUVMaps:
 				if textur.tex.getImage() is None or textur.tex.getImage().getFilename() is None:
-					print("WARNING: texture '%s' is not an image -> skipping" %textur.tex.getName())
+					print("WARNING: no image file assigned for texture '%s' -> skipping" %textur.tex.getName())
 				else:
 					m.appendChild(self.addImageMaps(textur))
 		#self.addMatScriptLink(mat, m)
@@ -668,7 +673,7 @@ class I3d:
 				i3dTex.setAttribute("bumpDepth", "%f" %textur.norfac) #Can't test this properly until proper transparent normal maps can be created
 			i3dTex.setAttribute("name", "%s" %self.addFile(path, name))
 			#print(textur.norfac)
-		elif textur.mtCsp: #Map To Spec
+		elif textur.mtCsp: #Map To Spec (csp for visibility in viewport)
 			if verboseLogging:
 				print("adding specular map '%s'" %name)
 			if textur.mtSpec == -1:
@@ -706,7 +711,6 @@ class I3d:
 	def addFile(self, path, texName):
 		for f in self.files.childNodes:
 			if f.getAttribute("filename") == path:
-				#print("file %s is already added, its id is %s" %(path, f.getAttribute("name")))
 				return f.getAttribute("name")
 		f = self.doc.createElement("File")
 		if relative:
@@ -838,7 +842,7 @@ guiPopup = 0
 
 #Text boxes
 folderName = "assets"
-exportPath = Draw.Create(Get("filename")[0:Get("filename").rfind(".")]+".i3d")
+exportPath = Draw.Create(sys.makename(path=Get("filename"), ext=".i3d"))
 
 #mouse x/y (just for fun)
 #mouseX = 0
@@ -868,7 +872,7 @@ def gui():
 	guiExportNormals = Draw.Toggle("Normals", evtExportNormals, 230, 180, 100, 25, exportNormals, "Export vertex normals")
 	guiExportSelection = Draw.Toggle("Only selected", evtExportSelection, 10, 145, 100, 25, exportSelection, "Only export selected objects")
 	guiExportProjectPath = Draw.Toggle("Project path", evtExportProjectPath, 120, 145, 100, 25, exportProjectPath, "Export with a path to current blender file")
-	guiVeboseLogging = Draw.Toggle("Verbose", evtVerboseLogging, 230, 145, 100, 25, verboseLogging, "Enable detailed logging for troubleshooting")
+	guiVeboseLogging = Draw.Toggle("Verbose", evtVerboseLogging, 230, 145, 100, 25, verboseLogging, "Enable detailed logging in console for troubleshooting")
 	exportPath = Draw.String("Export to: ", evtDoNothing, 10, 80, 260, 25, exportPath.val, 256,"Export to %s" %exportPath.val)
 	guiBrows = Draw.PushButton("Browse", evtBrows, 280, 80, 50, 25, "Open file browser to choose export location")
 	guiRelativePath = Draw.Toggle("R", evtRelativePath, 280, 110, 25, 25, relative, "Enable texture relative path")
@@ -1033,5 +1037,5 @@ def selectExportFile(file):
 	exportPath.val = file
 	#print(file)
 
-if __name__ == '__main__':
+if __name__ == '__main__' and not terminate:
 	Draw.Register(gui, event, buttonEvt)
