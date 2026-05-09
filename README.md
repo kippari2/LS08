@@ -7,5 +7,5 @@ Contents:
 * FMZBizonZ056V1
 * PlayercamAndScreenshot
 
-* [!Warning]
-* This repository has been migrated. Find the up-to-date version on [Codeberg](https://codeberg.org/Kippari2/LS08)
+> [!WARNING]  
+> This repository has been migrated. Find the up-to-date version on [Codeberg](https://codeberg.org/Kippari2/LS08)
